@@ -1,0 +1,367 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_OUTPUT_EXCMD	mixed	/number, pattern, mixed, or combineV2/
+!_TAG_OUTPUT_FILESEP	slash	/slash or backslash/
+!_TAG_OUTPUT_MODE	u-ctags	/u-ctags or e-ctags/
+!_TAG_PATTERN_LENGTH_LIMIT	96	/0 for no limit/
+!_TAG_PROC_CWD	/root/source/virtio-target/initiator/	//
+!_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
+!_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
+!_TAG_PROGRAM_URL	https://ctags.io/	/official site/
+!_TAG_PROGRAM_VERSION	5.9.0	//
+ARRAY_SIZE	vinitiator.h	/^#define ARRAY_SIZE(/;"	d
+ASSERT	test.c	/^#define ASSERT(/;"	d	file:
+ASSERT	vinitiator.h	/^#define ASSERT(/;"	d
+GET_COMMAND_ID	test.c	/^#define GET_COMMAND_ID /;"	d	file:
+GET_COMMON_ID	test.c	/^#define GET_COMMON_ID /;"	d	file:
+GET_CONFIG_ID	test.c	/^#define GET_CONFIG_ID /;"	d	file:
+GET_FEATURE_ID	test.c	/^#define GET_FEATURE_ID /;"	d	file:
+MAX_TRANSPORT	queue.c	/^#define MAX_TRANSPORT	/;"	d	file:
+SET_COMMAND_ID	test.c	/^#define SET_COMMAND_ID /;"	d	file:
+VIRTIO_INITIATOR_FABRICS_H	fabrics.h	/^#define VIRTIO_INITIATOR_FABRICS_H$/;"	d
+VIRTIO_INITIATOR_H	vinitiator.h	/^#define VIRTIO_INITIATOR_H$/;"	d
+VIRTIO_INITIATOR_QUEUE_H	queue.h	/^#define VIRTIO_INITIATOR_QUEUE_H$/;"	d
+VIRTIO_OF_E2BIG	virtio_of.h	/^	VIRTIO_OF_E2BIG = 7,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EACCES	virtio_of.h	/^	VIRTIO_OF_EACCES = 13,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EADDRINUSE	virtio_of.h	/^	VIRTIO_OF_EADDRINUSE = 98,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EADDRNOTAVAIL	virtio_of.h	/^	VIRTIO_OF_EADDRNOTAVAIL = 99,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EADV	virtio_of.h	/^	VIRTIO_OF_EADV = 68,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EAFNOSUPPORT	virtio_of.h	/^	VIRTIO_OF_EAFNOSUPPORT = 97,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EAGAIN	virtio_of.h	/^	VIRTIO_OF_EAGAIN = 11,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EALREADY	virtio_of.h	/^	VIRTIO_OF_EALREADY = 114,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBADE	virtio_of.h	/^	VIRTIO_OF_EBADE = 52,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBADF	virtio_of.h	/^	VIRTIO_OF_EBADF = 9,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBADFD	virtio_of.h	/^	VIRTIO_OF_EBADFD = 77,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBADMSG	virtio_of.h	/^	VIRTIO_OF_EBADMSG = 74,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBADR	virtio_of.h	/^	VIRTIO_OF_EBADR = 53,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBADRQC	virtio_of.h	/^	VIRTIO_OF_EBADRQC = 56,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBADSLT	virtio_of.h	/^	VIRTIO_OF_EBADSLT = 57,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBFONT	virtio_of.h	/^	VIRTIO_OF_EBFONT = 59,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EBUSY	virtio_of.h	/^	VIRTIO_OF_EBUSY = 16,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ECANCELED	virtio_of.h	/^	VIRTIO_OF_ECANCELED = 125,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ECHILD	virtio_of.h	/^	VIRTIO_OF_ECHILD = 10,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ECHRNG	virtio_of.h	/^	VIRTIO_OF_ECHRNG = 44,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ECOMM	virtio_of.h	/^	VIRTIO_OF_ECOMM = 70,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ECONNABORTED	virtio_of.h	/^	VIRTIO_OF_ECONNABORTED = 103,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ECONNREFUSED	virtio_of.h	/^	VIRTIO_OF_ECONNREFUSED = 111,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ECONNRESET	virtio_of.h	/^	VIRTIO_OF_ECONNRESET = 104,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EDEADLK	virtio_of.h	/^	VIRTIO_OF_EDEADLK = 35,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EDEADLOCK	virtio_of.h	/^	VIRTIO_OF_EDEADLOCK = 58,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EDESTADDRREQ	virtio_of.h	/^	VIRTIO_OF_EDESTADDRREQ = 89,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EDOM	virtio_of.h	/^	VIRTIO_OF_EDOM = 33,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EDOTDOT	virtio_of.h	/^	VIRTIO_OF_EDOTDOT = 73,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EDQUOT	virtio_of.h	/^	VIRTIO_OF_EDQUOT = 122,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EEXIST	virtio_of.h	/^	VIRTIO_OF_EEXIST = 17,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EFAULT	virtio_of.h	/^	VIRTIO_OF_EFAULT = 14,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EFBIG	virtio_of.h	/^	VIRTIO_OF_EFBIG = 27,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EHOSTDOWN	virtio_of.h	/^	VIRTIO_OF_EHOSTDOWN = 112,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EHOSTUNREACH	virtio_of.h	/^	VIRTIO_OF_EHOSTUNREACH = 113,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EHWPOISON	virtio_of.h	/^	VIRTIO_OF_EHWPOISON = 133,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EIDRM	virtio_of.h	/^	VIRTIO_OF_EIDRM = 43,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EILSEQ	virtio_of.h	/^	VIRTIO_OF_EILSEQ = 84,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EINPROGRESS	virtio_of.h	/^	VIRTIO_OF_EINPROGRESS = 115,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EINTR	virtio_of.h	/^	VIRTIO_OF_EINTR = 4,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EINVAL	virtio_of.h	/^	VIRTIO_OF_EINVAL = 22,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EIO	virtio_of.h	/^	VIRTIO_OF_EIO = 5,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EISCONN	virtio_of.h	/^	VIRTIO_OF_EISCONN = 106,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EISDIR	virtio_of.h	/^	VIRTIO_OF_EISDIR = 21,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EISNAM	virtio_of.h	/^	VIRTIO_OF_EISNAM = 120,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EKEYEXPIRED	virtio_of.h	/^	VIRTIO_OF_EKEYEXPIRED = 127,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EKEYREJECTED	virtio_of.h	/^	VIRTIO_OF_EKEYREJECTED = 129,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EKEYREVOKED	virtio_of.h	/^	VIRTIO_OF_EKEYREVOKED = 128,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EL2HLT	virtio_of.h	/^	VIRTIO_OF_EL2HLT = 51,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EL2NSYNC	virtio_of.h	/^	VIRTIO_OF_EL2NSYNC = 45,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EL3HLT	virtio_of.h	/^	VIRTIO_OF_EL3HLT = 46,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EL3RST	virtio_of.h	/^	VIRTIO_OF_EL3RST = 47,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ELIBACC	virtio_of.h	/^	VIRTIO_OF_ELIBACC = 79,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ELIBBAD	virtio_of.h	/^	VIRTIO_OF_ELIBBAD = 80,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ELIBEXEC	virtio_of.h	/^	VIRTIO_OF_ELIBEXEC = 83,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ELIBMAX	virtio_of.h	/^	VIRTIO_OF_ELIBMAX = 82,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ELIBSCN	virtio_of.h	/^	VIRTIO_OF_ELIBSCN = 81,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ELNRNG	virtio_of.h	/^	VIRTIO_OF_ELNRNG = 48,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ELOOP	virtio_of.h	/^	VIRTIO_OF_ELOOP = 40,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EMEDIUMTYPE	virtio_of.h	/^	VIRTIO_OF_EMEDIUMTYPE = 124,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EMFILE	virtio_of.h	/^	VIRTIO_OF_EMFILE = 24,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EMLINK	virtio_of.h	/^	VIRTIO_OF_EMLINK = 31,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EMSGSIZE	virtio_of.h	/^	VIRTIO_OF_EMSGSIZE = 90,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EMULTIHOP	virtio_of.h	/^	VIRTIO_OF_EMULTIHOP = 72,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENAMETOOLONG	virtio_of.h	/^	VIRTIO_OF_ENAMETOOLONG = 36,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENAVAIL	virtio_of.h	/^	VIRTIO_OF_ENAVAIL = 119,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENETDOWN	virtio_of.h	/^	VIRTIO_OF_ENETDOWN = 100,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENETRESET	virtio_of.h	/^	VIRTIO_OF_ENETRESET = 102,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENETUNREACH	virtio_of.h	/^	VIRTIO_OF_ENETUNREACH = 101,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENFILE	virtio_of.h	/^	VIRTIO_OF_ENFILE = 23,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOANO	virtio_of.h	/^	VIRTIO_OF_ENOANO = 55,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOBUFS	virtio_of.h	/^	VIRTIO_OF_ENOBUFS = 105,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOCSI	virtio_of.h	/^	VIRTIO_OF_ENOCSI = 50,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENODATA	virtio_of.h	/^	VIRTIO_OF_ENODATA = 61,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENODEV	virtio_of.h	/^	VIRTIO_OF_ENODEV = 19,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOENT	virtio_of.h	/^	VIRTIO_OF_ENOENT = 2,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOEXEC	virtio_of.h	/^	VIRTIO_OF_ENOEXEC = 8,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOKEY	virtio_of.h	/^	VIRTIO_OF_ENOKEY = 126,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOLCK	virtio_of.h	/^	VIRTIO_OF_ENOLCK = 37,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOLINK	virtio_of.h	/^	VIRTIO_OF_ENOLINK = 67,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOMEDIUM	virtio_of.h	/^	VIRTIO_OF_ENOMEDIUM = 123,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOMEM	virtio_of.h	/^	VIRTIO_OF_ENOMEM = 12,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOMSG	virtio_of.h	/^	VIRTIO_OF_ENOMSG = 42,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENONET	virtio_of.h	/^	VIRTIO_OF_ENONET = 64,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOPKG	virtio_of.h	/^	VIRTIO_OF_ENOPKG = 65,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOPROTOOPT	virtio_of.h	/^	VIRTIO_OF_ENOPROTOOPT = 92,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOSPC	virtio_of.h	/^	VIRTIO_OF_ENOSPC = 28,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOSR	virtio_of.h	/^	VIRTIO_OF_ENOSR = 63,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOSTR	virtio_of.h	/^	VIRTIO_OF_ENOSTR = 60,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOSYS	virtio_of.h	/^	VIRTIO_OF_ENOSYS = 38,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTBLK	virtio_of.h	/^	VIRTIO_OF_ENOTBLK = 15,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTCONN	virtio_of.h	/^	VIRTIO_OF_ENOTCONN = 107,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTDIR	virtio_of.h	/^	VIRTIO_OF_ENOTDIR = 20,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTEMPTY	virtio_of.h	/^	VIRTIO_OF_ENOTEMPTY = 39,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTNAM	virtio_of.h	/^	VIRTIO_OF_ENOTNAM = 118,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTRECOVERABLE	virtio_of.h	/^	VIRTIO_OF_ENOTRECOVERABLE = 131,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTSOCK	virtio_of.h	/^	VIRTIO_OF_ENOTSOCK = 88,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTTY	virtio_of.h	/^	VIRTIO_OF_ENOTTY = 25,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENOTUNIQ	virtio_of.h	/^	VIRTIO_OF_ENOTUNIQ = 76,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ENXIO	virtio_of.h	/^	VIRTIO_OF_ENXIO = 6,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EOPNOTSUPP	virtio_of.h	/^	VIRTIO_OF_EOPNOTSUPP = 95,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EOVERFLOW	virtio_of.h	/^	VIRTIO_OF_EOVERFLOW = 75,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EOWNERDEAD	virtio_of.h	/^	VIRTIO_OF_EOWNERDEAD = 130,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EPERM	virtio_of.h	/^	VIRTIO_OF_EPERM = 1,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EPFNOSUPPORT	virtio_of.h	/^	VIRTIO_OF_EPFNOSUPPORT = 96,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EPIPE	virtio_of.h	/^	VIRTIO_OF_EPIPE = 32,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EPROTO	virtio_of.h	/^	VIRTIO_OF_EPROTO = 71,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EPROTONOSUPPORT	virtio_of.h	/^	VIRTIO_OF_EPROTONOSUPPORT = 93,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EPROTOTYPE	virtio_of.h	/^	VIRTIO_OF_EPROTOTYPE = 91,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EQUIRK	virtio_of.h	/^	VIRTIO_OF_EQUIRK = 4096$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ERANGE	virtio_of.h	/^	VIRTIO_OF_ERANGE = 34,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EREMCHG	virtio_of.h	/^	VIRTIO_OF_EREMCHG = 78,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EREMOTE	virtio_of.h	/^	VIRTIO_OF_EREMOTE = 66,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EREMOTEIO	virtio_of.h	/^	VIRTIO_OF_EREMOTEIO = 121,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ERESTART	virtio_of.h	/^	VIRTIO_OF_ERESTART = 85,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ERFKILL	virtio_of.h	/^	VIRTIO_OF_ERFKILL = 132,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EROFS	virtio_of.h	/^	VIRTIO_OF_EROFS = 30,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ESHUTDOWN	virtio_of.h	/^	VIRTIO_OF_ESHUTDOWN = 108,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ESOCKTNOSUPPORT	virtio_of.h	/^	VIRTIO_OF_ESOCKTNOSUPPORT = 94,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ESPIPE	virtio_of.h	/^	VIRTIO_OF_ESPIPE = 29,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ESRCH	virtio_of.h	/^	VIRTIO_OF_ESRCH = 3,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ESRMNT	virtio_of.h	/^	VIRTIO_OF_ESRMNT = 69,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ESTALE	virtio_of.h	/^	VIRTIO_OF_ESTALE = 116,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ESTRPIPE	virtio_of.h	/^	VIRTIO_OF_ESTRPIPE = 86,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ETIME	virtio_of.h	/^	VIRTIO_OF_ETIME = 62,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ETIMEDOUT	virtio_of.h	/^	VIRTIO_OF_ETIMEDOUT = 110,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ETOOMANYREFS	virtio_of.h	/^	VIRTIO_OF_ETOOMANYREFS = 109,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_ETXTBSY	virtio_of.h	/^	VIRTIO_OF_ETXTBSY = 26,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EUCLEAN	virtio_of.h	/^	VIRTIO_OF_EUCLEAN = 117,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EUNATCH	virtio_of.h	/^	VIRTIO_OF_EUNATCH = 49,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EUSERS	virtio_of.h	/^	VIRTIO_OF_EUSERS = 87,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EWOULDBLOCK	virtio_of.h	/^	VIRTIO_OF_EWOULDBLOCK = 41,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EXDEV	virtio_of.h	/^	VIRTIO_OF_EXDEV = 18,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_EXFULL	virtio_of.h	/^	VIRTIO_OF_EXFULL = 54,$/;"	e	enum:virtio_of_status
+VIRTIO_OF_SUCCESS	virtio_of.h	/^	VIRTIO_OF_SUCCESS = 0,$/;"	e	enum:virtio_of_status
+VI_RDMA_DEPTH	rdma.c	/^#define VI_RDMA_DEPTH	/;"	d	file:
+VI_RDMA_MAX_SEGS	rdma.c	/^#define VI_RDMA_MAX_SEGS	/;"	d	file:
+_LINUX_VIRTIO_OF_H	virtio_of.h	/^#define _LINUX_VIRTIO_OF_H$/;"	d
+__anon963ed9ec010a	virtio_of.h	/^	union {$/;"	u	struct:virtio_of_vring_desc
+__anon963ed9ec020a	virtio_of.h	/^	union {$/;"	u	struct:virtio_of_command
+addr	virtio_of.h	/^	__le64 addr;$/;"	m	struct:virtio_of_vring_desc	typeref:typename:__le64
+bufmr	rdma.c	/^	struct ibv_mr *bufmr[VI_RDMA_MAX_SEGS];$/;"	m	struct:vi_rdma_request	typeref:struct:ibv_mr * []	file:
+bytes	virtio_of.h	/^	__u8 bytes;$/;"	m	struct:virtio_of_command_config	typeref:typename:__u8
+clean	Makefile	/^clean:$/;"	t
+cm_id	rdma.c	/^	struct rdma_cm_id *cm_id;$/;"	m	struct:vi_rdma_queue	typeref:struct:rdma_cm_id *	file:
+command_id	virtio_of.h	/^	__le16 command_id;$/;"	m	struct:virtio_of_command_common	typeref:typename:__le16
+command_id	virtio_of.h	/^	__le16 command_id;$/;"	m	struct:virtio_of_command_config	typeref:typename:__le16
+command_id	virtio_of.h	/^	__le16 command_id;$/;"	m	struct:virtio_of_command_feature	typeref:typename:__le16
+command_id	virtio_of.h	/^	__le16 command_id;$/;"	m	struct:virtio_of_command_queue	typeref:typename:__le16
+command_id	virtio_of.h	/^	__le16 command_id;$/;"	m	struct:virtio_of_command_status	typeref:typename:__le16
+command_id	virtio_of.h	/^	__le16 command_id;$/;"	m	struct:virtio_of_command_vring	typeref:typename:__le16
+command_id	virtio_of.h	/^	__le16 command_id;$/;"	m	struct:virtio_of_completion	typeref:typename:__le16
+common	virtio_of.h	/^		struct virtio_of_command_common common;$/;"	m	union:virtio_of_command::__anon963ed9ec020a	typeref:struct:virtio_of_command_common
+comp_channel	rdma.c	/^	struct ibv_comp_channel *comp_channel;$/;"	m	struct:vi_rdma_queue	typeref:struct:ibv_comp_channel *	file:
+compmr	rdma.c	/^	struct ibv_mr *compmr;$/;"	m	struct:vi_rdma_queue	typeref:struct:ibv_mr *	file:
+config	virtio_of.h	/^		struct virtio_of_command_config config;$/;"	m	union:virtio_of_command::__anon963ed9ec020a	typeref:struct:virtio_of_command_config
+connect	virtio_of.h	/^		struct virtio_of_command_connect connect;$/;"	m	union:virtio_of_command::__anon963ed9ec020a	typeref:struct:virtio_of_command_connect
+cq	rdma.c	/^	struct ibv_cq *cq;$/;"	m	struct:vi_rdma_queue	typeref:struct:ibv_cq *	file:
+create_queue	queue.h	/^	void *(*create_queue)(const char *taddr, int tport);$/;"	m	struct:vi_queue	typeref:typename:void * (*)(const char * taddr,int tport)
+create_queue	test.c	/^static int create_queue(int sockfd, int target_id, const char *tvqn, int *id)$/;"	f	typeref:typename:int	file:
+destroy_queue	queue.h	/^	void (*destroy_queue)(void *queue);$/;"	m	struct:vi_queue	typeref:typename:void (*)(void * queue)
+epollfd	rdma.c	/^	int epollfd;$/;"	m	struct:vi_rdma_queue	typeref:typename:int	file:
+feature	virtio_of.h	/^		struct virtio_of_command_feature feature;$/;"	m	union:virtio_of_command::__anon963ed9ec020a	typeref:struct:virtio_of_command_feature
+feature_select	virtio_of.h	/^	__le32 feature_select;$/;"	m	struct:virtio_of_command_feature	typeref:typename:__le32
+flags	virtio_of.h	/^	__le16 flags;$/;"	m	struct:virtio_of_vring_desc	typeref:typename:__le16
+get_common	test.c	/^static __u64 get_common(int sockfd, __u16 opcode, int bytes)$/;"	f	typeref:typename:__u64	file:
+get_config	test.c	/^static __u64 get_config(int sockfd, __u16 offset, __u8 bytes)$/;"	f	typeref:typename:__u64	file:
+get_config_block	test.c	/^static void get_config_block(int sockfd)$/;"	f	typeref:typename:void	file:
+get_device_feature	test.c	/^static __u64 get_device_feature(int sockfd)$/;"	f	typeref:typename:__u64	file:
+get_device_id	test.c	/^static int get_device_id(int sockfd)$/;"	f	typeref:typename:int	file:
+get_num_queues	test.c	/^static int get_num_queues(int sockfd)$/;"	f	typeref:typename:int	file:
+get_queue_size	test.c	/^static int get_queue_size(int sockfd, __u16 queue_id)$/;"	f	typeref:typename:int	file:
+get_vendor_id	test.c	/^static int get_vendor_id(int sockfd)$/;"	f	typeref:typename:int	file:
+id	vinitiator.h	/^	unsigned int id;$/;"	m	struct:vi_device	typeref:typename:unsigned int
+id	virtio_of.h	/^	__le16 id;$/;"	m	struct:virtio_of_vring_desc	typeref:typename:__le16
+inuse	rdma.c	/^	unsigned char inuse;$/;"	m	struct:vi_rdma_request	typeref:typename:unsigned char	file:
+ivqn	test.c	/^static char *ivqn = "virtio-target-test-initiator";$/;"	v	typeref:typename:char *	file:
+ivqn	virtio_of.h	/^	__u8 ivqn[256];$/;"	m	struct:virtio_of_connect	typeref:typename:__u8[256]
+key	virtio_of.h	/^		__le32 key;$/;"	m	union:virtio_of_vring_desc::__anon963ed9ec010a	typeref:typename:__le32
+length	virtio_of.h	/^	__le32 length;$/;"	m	struct:virtio_of_command_vring	typeref:typename:__le32
+length	virtio_of.h	/^	__le32 length;$/;"	m	struct:virtio_of_vring_desc	typeref:typename:__le32
+main	test.c	/^int main() $/;"	f	typeref:typename:int
+main	vinitiator.c	/^int main()$/;"	f	typeref:typename:int
+name	vinitiator.h	/^	char *name;$/;"	m	struct:vi_device	typeref:typename:char *
+ndesc	rdma.c	/^	int ndesc;$/;"	m	struct:vi_rdma_request	typeref:typename:int	file:
+ndesc	virtio_of.h	/^	__le16 ndesc;$/;"	m	struct:virtio_of_command_connect	typeref:typename:__le16
+ndesc	virtio_of.h	/^	__le16 ndesc;$/;"	m	struct:virtio_of_command_vring	typeref:typename:__le16
+ndesc	virtio_of.h	/^	__le16 ndesc;$/;"	m	struct:virtio_of_completion	typeref:typename:__le16
+offset	virtio_of.h	/^	__le16 offset;$/;"	m	struct:virtio_of_command_config	typeref:typename:__le16
+oftype	queue.h	/^	enum virtio_of_connection_type oftype;$/;"	m	struct:vi_queue	typeref:enum:virtio_of_connection_type
+oftype	virtio_of.h	/^	__u8 oftype; \/* enum virtio_of_connection_type *\/$/;"	m	struct:virtio_of_command_connect	typeref:typename:__u8
+opcode	virtio_of.h	/^	__le16 opcode;$/;"	m	struct:virtio_of_command_common	typeref:typename:__le16
+opcode	virtio_of.h	/^	__le16 opcode;$/;"	m	struct:virtio_of_command_config	typeref:typename:__le16
+opcode	virtio_of.h	/^	__le16 opcode;$/;"	m	struct:virtio_of_command_connect	typeref:typename:__le16
+opcode	virtio_of.h	/^	__le16 opcode;$/;"	m	struct:virtio_of_command_feature	typeref:typename:__le16
+opcode	virtio_of.h	/^	__le16 opcode;$/;"	m	struct:virtio_of_command_queue	typeref:typename:__le16
+opcode	virtio_of.h	/^	__le16 opcode;$/;"	m	struct:virtio_of_command_status	typeref:typename:__le16
+opcode	virtio_of.h	/^	__le16 opcode;$/;"	m	struct:virtio_of_command_vring	typeref:typename:__le16
+prepare	Makefile	/^prepare:$/;"	t
+queue	virtio_of.h	/^		struct virtio_of_command_queue queue;$/;"	m	union:virtio_of_command::__anon963ed9ec020a	typeref:struct:virtio_of_command_queue
+queue_id	virtio_of.h	/^	__le16 queue_id;$/;"	m	struct:virtio_of_command_connect	typeref:typename:__le16
+queue_id	virtio_of.h	/^	__le16 queue_id;$/;"	m	struct:virtio_of_command_queue	typeref:typename:__le16
+read	vinitiator.h	/^	int (*read)(struct vi_queue *viq, void *queue, int niov, struct iovec *iovs, off_t offset);$/;"	m	struct:vi_device	typeref:typename:int (*)(struct vi_queue * viq,void * queue,int niov,struct iovec * iovs,off_t offset)
+read_blk	test.c	/^static int read_blk(int sockfd)$/;"	f	typeref:typename:int	file:
+readbuf	test.c	/^static ssize_t readbuf(int fd, void *buf, size_t count)$/;"	f	typeref:typename:ssize_t	file:
+recv_comp	queue.h	/^	int (*recv_comp)(void *queue, struct virtio_of_completion *vofcomp, int ndesc, struct virtio_of/;"	m	struct:vi_queue	typeref:typename:int (*)(void * queue,struct virtio_of_completion * vofcomp,int ndesc,struct virtio_of_vring_desc * descs,struct iovec * iovs)
+req	rdma.c	/^	struct vi_rdma_request req[VI_RDMA_DEPTH];$/;"	m	struct:vi_rdma_queue	typeref:struct:vi_rdma_request[]	file:
+reqmr	rdma.c	/^	struct ibv_mr *reqmr;$/;"	m	struct:vi_rdma_queue	typeref:struct:ibv_mr *	file:
+reset_queue	test.c	/^static void reset_queue(int sockfd)$/;"	f	typeref:typename:void	file:
+rsvd	virtio_of.h	/^	__u8 rsvd[512];$/;"	m	struct:virtio_of_connect	typeref:typename:__u8[512]
+rsvd	virtio_of.h	/^	__u8 rsvd[6];$/;"	m	struct:virtio_of_command_vring	typeref:typename:__u8[6]
+rsvd	virtio_of.h	/^	__u8 rsvd[7];$/;"	m	struct:virtio_of_command_connect	typeref:typename:__u8[7]
+rsvd	virtio_of.h	/^	__u8 rsvd[8];$/;"	m	struct:virtio_of_command_status	typeref:typename:__u8[8]
+rsvd4	virtio_of.h	/^	__u8 rsvd4;$/;"	m	struct:virtio_of_command_common	typeref:typename:__u8
+rsvd5	virtio_of.h	/^	__u8 rsvd5;$/;"	m	struct:virtio_of_command_common	typeref:typename:__u8
+rsvd6	virtio_of.h	/^	__u8 rsvd6;$/;"	m	struct:virtio_of_command_common	typeref:typename:__u8
+rsvd6	virtio_of.h	/^	__u8 rsvd6;$/;"	m	struct:virtio_of_command_queue	typeref:typename:__u8
+rsvd6	virtio_of.h	/^	__u8 rsvd6;$/;"	m	struct:virtio_of_completion	typeref:typename:__u8
+rsvd7	virtio_of.h	/^	__u8 rsvd7;$/;"	m	struct:virtio_of_command_common	typeref:typename:__u8
+rsvd7	virtio_of.h	/^	__u8 rsvd7;$/;"	m	struct:virtio_of_command_config	typeref:typename:__u8
+rsvd7	virtio_of.h	/^	__u8 rsvd7;$/;"	m	struct:virtio_of_command_queue	typeref:typename:__u8
+rsvd7	virtio_of.h	/^	__u8 rsvd7;$/;"	m	struct:virtio_of_completion	typeref:typename:__u8
+send_cmd	queue.h	/^	int (*send_cmd)(void *queue, struct virtio_of_command *vofcmd, int ndesc, struct virtio_of_vrin/;"	m	struct:vi_queue	typeref:typename:int (*)(void * queue,struct virtio_of_command * vofcmd,int ndesc,struct virtio_of_vring_desc * descs,struct iovec * iovs)
+set_status	test.c	/^static void set_status(int sockfd, int status)$/;"	f	typeref:typename:void	file:
+setup_vqueues	test.c	/^static int *setup_vqueues(int ctrlfd, char *taddr, int tport, int target_id, int queues)$/;"	f	typeref:typename:int *	file:
+show_config	vinitiator.h	/^	void (*show_config)(struct vi_queue *viq, void *queue);$/;"	m	struct:vi_device	typeref:typename:void (*)(struct vi_queue * viq,void * queue)
+sock_connect	test.c	/^static int sock_connect(const char *addr, int port)$/;"	f	typeref:typename:int	file:
+sockfd	tcp.c	/^	int sockfd;$/;"	m	struct:vi_tcp_queue	typeref:typename:int	file:
+status	virtio_of.h	/^		struct virtio_of_command_status status;$/;"	m	union:virtio_of_command::__anon963ed9ec020a	typeref:struct:virtio_of_command_status
+status	virtio_of.h	/^	__le16 status;$/;"	m	struct:virtio_of_completion	typeref:typename:__le16
+status	virtio_of.h	/^	__le32 status;	\/* ignore this field on GET *\/$/;"	m	struct:virtio_of_command_status	typeref:typename:__le32
+target_id	virtio_of.h	/^	__le16 target_id;$/;"	m	struct:virtio_of_command_connect	typeref:typename:__le16
+test	Makefile	/^test: clean prepare$/;"	t
+transport	queue.h	/^	char *transport;$/;"	m	struct:vi_queue	typeref:typename:char *
+tvqn	test.c	/^static char *tvqn = "virtio-target\/block\/block0.service";$/;"	v	typeref:typename:char *	file:
+tvqn	virtio_of.h	/^	__u8 tvqn[256];$/;"	m	struct:virtio_of_connect	typeref:typename:__u8[256]
+u16	virtio_of.h	/^	__le16 u16;$/;"	m	union:virtio_of_value	typeref:typename:__le16
+u32	virtio_of.h	/^	__le32 u32;$/;"	m	union:virtio_of_value	typeref:typename:__le32
+u64	virtio_of.h	/^	__le64 u64;$/;"	m	union:virtio_of_value	typeref:typename:__le64
+u8	virtio_of.h	/^	__u8 u8;$/;"	m	union:virtio_of_value	typeref:typename:__u8
+value	virtio_of.h	/^	__le64 value;	\/* ignore this field on GET *\/$/;"	m	struct:virtio_of_command_feature	typeref:typename:__le64
+value	virtio_of.h	/^	__le64 value;   \/* ignore this field on GET *\/$/;"	m	struct:virtio_of_command_queue	typeref:typename:__le64
+value	virtio_of.h	/^	union virtio_of_value value;	\/* ignore this field on GET *\/$/;"	m	struct:virtio_of_command_common	typeref:union:virtio_of_value
+value	virtio_of.h	/^	union virtio_of_value value;	\/* ignore this field on GET *\/$/;"	m	struct:virtio_of_command_config	typeref:union:virtio_of_value
+value	virtio_of.h	/^	union virtio_of_value value;$/;"	m	struct:virtio_of_completion	typeref:union:virtio_of_value
+vi_add_event	vinitiator.h	/^static inline void vi_add_event(int epollfd, int fd, void *ctx)$/;"	f	typeref:typename:void
+vi_block	block.c	/^static struct vi_device vi_block = {$/;"	v	typeref:struct:vi_device	file:
+vi_block_init	block.c	/^static void __attribute__((constructor)) vi_block_init(void)$/;"	f	typeref:typename:void	file:
+vi_block_read	block.c	/^static int vi_block_read(struct vi_queue *viq, void *queue, int niov, struct iovec *_iovs, off_t/;"	f	typeref:typename:int	file:
+vi_block_show_config	block.c	/^static void vi_block_show_config(struct vi_queue *viq, void *queue)$/;"	f	typeref:typename:void	file:
+vi_del_event	vinitiator.h	/^static inline void vi_del_event(int epollfd, int fd)$/;"	f	typeref:typename:void
+vi_device	vinitiator.h	/^struct vi_device {$/;"	s
+vi_device_name	vinitiator.c	/^static char *vi_device_name(unsigned int device_id)$/;"	f	typeref:typename:char *	file:
+vi_device_register	vinitiator.c	/^void vi_device_register(struct vi_device *videv)$/;"	f	typeref:typename:void
+vi_device_show_config	vinitiator.c	/^static void vi_device_show_config(struct vi_queue *viq, void *queue, unsigned int device_id)$/;"	f	typeref:typename:void	file:
+vi_fabric_command_id	fabrics.c	/^static inline __u16 vi_fabric_command_id(__u16 opcode)$/;"	f	typeref:typename:__u16	file:
+vi_fabric_connect	fabrics.c	/^void vi_fabric_connect(struct virtio_of_command *vofcmd, struct virtio_of_connect *vofconnect, s/;"	f	typeref:typename:void
+vi_fabric_get_common	fabrics.c	/^static void vi_fabric_get_common(struct virtio_of_command *vofcmd, __u16 opcode)$/;"	f	typeref:typename:void	file:
+vi_fabric_get_config	fabrics.c	/^void vi_fabric_get_config(struct virtio_of_command *vofcmd, __u16 offset, __u8 bytes)$/;"	f	typeref:typename:void
+vi_fabric_get_device_id	fabrics.c	/^void vi_fabric_get_device_id(struct virtio_of_command *vofcmd)$/;"	f	typeref:typename:void
+vi_fabric_get_num_queues	fabrics.c	/^void vi_fabric_get_num_queues(struct virtio_of_command *vofcmd)$/;"	f	typeref:typename:void
+vi_fabric_get_queue_size	fabrics.c	/^void vi_fabric_get_queue_size(struct virtio_of_command *vofcmd, __u16 queue_id)$/;"	f	typeref:typename:void
+vi_fabric_get_vendor_id	fabrics.c	/^void vi_fabric_get_vendor_id(struct virtio_of_command *vofcmd)$/;"	f	typeref:typename:void
+vi_fabric_vring	fabrics.c	/^void vi_fabric_vring(struct virtio_of_command *vofcmd, __u16 command_id, __u32 length, __u16 nde/;"	f	typeref:typename:void
+vi_get_device	vinitiator.c	/^static struct vi_device *vi_get_device(unsigned int device_id)$/;"	f	typeref:struct:vi_device *	file:
+vi_queue	queue.h	/^struct vi_queue {$/;"	s
+vi_queue_connect_queue	queue.c	/^void vi_queue_connect_queue(struct vi_queue *viq, void *queue, int *target_id, int queue_id, cha/;"	f	typeref:typename:void
+vi_queue_get_config	queue.c	/^__u64 vi_queue_get_config(struct vi_queue *viq, void *queue, __u16 offset, __u8 bytes)$/;"	f	typeref:typename:__u64
+vi_queue_get_device_id	queue.c	/^unsigned int vi_queue_get_device_id(struct vi_queue *viq, void *queue)$/;"	f	typeref:typename:unsigned int
+vi_queue_get_num_queues	queue.c	/^unsigned int vi_queue_get_num_queues(struct vi_queue *viq, void *queue)$/;"	f	typeref:typename:unsigned int
+vi_queue_get_queue_size	queue.c	/^unsigned int vi_queue_get_queue_size(struct vi_queue *viq, void *queue, __u16 queue_id)$/;"	f	typeref:typename:unsigned int
+vi_queue_get_vendor_id	queue.c	/^unsigned int vi_queue_get_vendor_id(struct vi_queue *viq, void *queue)$/;"	f	typeref:typename:unsigned int
+vi_queue_lookup	queue.c	/^struct vi_queue *vi_queue_lookup(const char *transport)$/;"	f	typeref:struct:vi_queue *
+vi_queue_rdma	rdma.c	/^static struct vi_queue vi_queue_rdma = {$/;"	v	typeref:struct:vi_queue	file:
+vi_queue_rdma_init	rdma.c	/^static void __attribute__((constructor)) vi_queue_rdma_init(void)$/;"	f	typeref:typename:void	file:
+vi_queue_register	queue.c	/^void vi_queue_register(struct vi_queue *viq)$/;"	f	typeref:typename:void
+vi_queue_tcp	tcp.c	/^static struct vi_queue vi_queue_tcp = {$/;"	v	typeref:struct:vi_queue	file:
+vi_queue_tcp_init	tcp.c	/^static void __attribute__((constructor)) vi_queue_tcp_init(void)$/;"	f	typeref:typename:void	file:
+vi_queues	queue.c	/^static struct vi_queue *vi_queues[MAX_TRANSPORT];	\/* TCP & RDMA *\/$/;"	v	typeref:struct:vi_queue * []	file:
+vi_rdma_connect	rdma.c	/^static int vi_rdma_connect(struct vi_rdma_queue *queue)$/;"	f	typeref:typename:int	file:
+vi_rdma_create_queue	rdma.c	/^static void *vi_rdma_create_queue(const char *taddr, int tport)$/;"	f	typeref:typename:void *	file:
+vi_rdma_established	rdma.c	/^static void vi_rdma_established(struct vi_rdma_queue *queue)$/;"	f	typeref:typename:void	file:
+vi_rdma_get_req	rdma.c	/^static struct vi_rdma_request *vi_rdma_get_req(struct vi_rdma_queue *queue)$/;"	f	typeref:struct:vi_rdma_request *	file:
+vi_rdma_handle_cm_event	rdma.c	/^static int vi_rdma_handle_cm_event(struct vi_rdma_queue *queue)$/;"	f	typeref:typename:int	file:
+vi_rdma_put_req	rdma.c	/^static void vi_rdma_put_req(struct vi_rdma_queue *queue, int command_id)$/;"	f	typeref:typename:void	file:
+vi_rdma_queue	rdma.c	/^struct vi_rdma_queue {$/;"	s	file:
+vi_rdma_recv_comp	rdma.c	/^static int vi_rdma_recv_comp(void *_queue, struct virtio_of_completion *_vofcomp, int ndesc, str/;"	f	typeref:typename:int	file:
+vi_rdma_recv_one	rdma.c	/^static void vi_rdma_recv_one(struct vi_rdma_queue *queue, struct virtio_of_completion *vofcomp)$/;"	f	typeref:typename:void	file:
+vi_rdma_request	rdma.c	/^struct vi_rdma_request {$/;"	s	file:
+vi_rdma_send_cmd	rdma.c	/^static int vi_rdma_send_cmd(void *_queue, struct virtio_of_command *vofcmd, int ndesc, struct vi/;"	f	typeref:typename:int	file:
+vi_rdma_wait_established	rdma.c	/^static void vi_rdma_wait_established(struct vi_rdma_queue *queue)$/;"	f	typeref:typename:void	file:
+vi_set_nonblock	vinitiator.h	/^static inline void vi_set_nonblock(int fd)$/;"	f	typeref:typename:void
+vi_setup_vqs	vinitiator.c	/^static void **vi_setup_vqs(struct vi_queue *viq, void *ctrlq, int target_id, int nqueues, char */;"	f	typeref:typename:void **	file:
+vi_tcp_create_queue	tcp.c	/^static void *vi_tcp_create_queue(const char *taddr, int tport)$/;"	f	typeref:typename:void *	file:
+vi_tcp_queue	tcp.c	/^struct vi_tcp_queue {$/;"	s	file:
+vi_tcp_recv_comp	tcp.c	/^static int vi_tcp_recv_comp(void *_queue, struct virtio_of_completion *vofcomp, int ndesc, struc/;"	f	typeref:typename:int	file:
+vi_tcp_recv_one	tcp.c	/^static ssize_t vi_tcp_recv_one(int fd, void *buf, size_t count)$/;"	f	typeref:typename:ssize_t	file:
+vi_tcp_send_cmd	tcp.c	/^static int vi_tcp_send_cmd(void *_queue, struct virtio_of_command *vofcmd, int ndesc, struct vir/;"	f	typeref:typename:int	file:
+videvs	vinitiator.c	/^static struct vi_device *videvs[42];$/;"	v	typeref:struct:vi_device * [42]	file:
+virtio_ids_table	test.c	/^static char *virtio_ids_table[] = {$/;"	v	typeref:typename:char * []	file:
+virtio_of_command	virtio_of.h	/^struct virtio_of_command {$/;"	s
+virtio_of_command_common	virtio_of.h	/^struct virtio_of_command_common {$/;"	s
+virtio_of_command_config	virtio_of.h	/^struct virtio_of_command_config {$/;"	s
+virtio_of_command_connect	virtio_of.h	/^struct virtio_of_command_connect {$/;"	s
+virtio_of_command_feature	virtio_of.h	/^struct virtio_of_command_feature {$/;"	s
+virtio_of_command_queue	virtio_of.h	/^struct virtio_of_command_queue {$/;"	s
+virtio_of_command_status	virtio_of.h	/^struct virtio_of_command_status {$/;"	s
+virtio_of_command_vring	virtio_of.h	/^struct virtio_of_command_vring {$/;"	s
+virtio_of_completion	virtio_of.h	/^struct virtio_of_completion {$/;"	s
+virtio_of_connect	virtio_of.h	/^struct virtio_of_connect {$/;"	s
+virtio_of_connection_rdma	virtio_of.h	/^	virtio_of_connection_rdma$/;"	e	enum:virtio_of_connection_type
+virtio_of_connection_tcp	virtio_of.h	/^	virtio_of_connection_tcp,$/;"	e	enum:virtio_of_connection_type
+virtio_of_connection_type	virtio_of.h	/^enum virtio_of_connection_type {$/;"	g
+virtio_of_feature	virtio_of.h	/^enum virtio_of_feature {$/;"	g
+virtio_of_feature_max_segs	virtio_of.h	/^	virtio_of_feature_max_segs,$/;"	e	enum:virtio_of_feature
+virtio_of_op_connect	virtio_of.h	/^	virtio_of_op_connect = 0,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_discconnect	virtio_of.h	/^	virtio_of_op_discconnect,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_config	virtio_of.h	/^	virtio_of_op_get_config,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_config_changed	virtio_of.h	/^	virtio_of_op_get_config_changed,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_device_feature	virtio_of.h	/^	virtio_of_op_get_device_feature,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_device_id	virtio_of.h	/^	virtio_of_op_get_device_id,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_feature	virtio_of.h	/^	virtio_of_op_get_feature,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_generation	virtio_of.h	/^	virtio_of_op_get_generation,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_num_queues	virtio_of.h	/^	virtio_of_op_get_num_queues,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_queue_size	virtio_of.h	/^	virtio_of_op_get_queue_size,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_status	virtio_of.h	/^	virtio_of_op_get_status,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_get_vendor_id	virtio_of.h	/^	virtio_of_op_get_vendor_id = 4096,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_keepalive	virtio_of.h	/^	virtio_of_op_keepalive,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_set_config	virtio_of.h	/^	virtio_of_op_set_config,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_set_driver_feature	virtio_of.h	/^	virtio_of_op_set_driver_feature,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_set_feature	virtio_of.h	/^	virtio_of_op_set_feature,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_set_queue_size	virtio_of.h	/^	virtio_of_op_set_queue_size,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_set_status	virtio_of.h	/^	virtio_of_op_set_status,$/;"	e	enum:virtio_of_opcode
+virtio_of_op_vring	virtio_of.h	/^	virtio_of_op_vring = 8192,$/;"	e	enum:virtio_of_opcode
+virtio_of_opcode	virtio_of.h	/^enum virtio_of_opcode {$/;"	g
+virtio_of_status	virtio_of.h	/^enum virtio_of_status {$/;"	g
+virtio_of_value	virtio_of.h	/^union virtio_of_value {$/;"	u
+virtio_of_vring_desc	virtio_of.h	/^struct virtio_of_vring_desc {$/;"	s
+vofcmd	rdma.c	/^	struct virtio_of_command vofcmd; \/* keep *contiguous* with vofdesc *\/$/;"	m	struct:vi_rdma_request	typeref:struct:virtio_of_command	file:
+vofcomp	rdma.c	/^	struct virtio_of_completion vofcomp[VI_RDMA_DEPTH];$/;"	m	struct:vi_rdma_queue	typeref:struct:virtio_of_completion[]	file:
+vofdesc	rdma.c	/^	struct virtio_of_vring_desc vofdesc[VI_RDMA_MAX_SEGS];$/;"	m	struct:vi_rdma_request	typeref:struct:virtio_of_vring_desc[]	file:
+vring	virtio_of.h	/^		struct virtio_of_command_vring vring;$/;"	m	union:virtio_of_command::__anon963ed9ec020a	typeref:struct:virtio_of_command_vring
+write_blk	test.c	/^static int write_blk(int sockfd)$/;"	f	typeref:typename:int	file:
+write_blk_bench	test.c	/^static int write_blk_bench(int sockfd, int depth)$/;"	f	typeref:typename:int	file:
