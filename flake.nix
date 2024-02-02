@@ -8,27 +8,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    nixGL = {
-      url = "github:guibou/nixGL";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-    };
     nix-vscode-extensions = {
       url = "github:nix-community/nix-vscode-extensions";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
-    };
-    virglrenderer-debug-flake = {
-      url = "git+file:/home/amakarov/work/virglrenderer";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-      inputs.nixGL.follows = "nixGL";
-    };
-    uhmitest = {
-      url = "github:aleksey-makarov/uhmitest";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "flake-utils";
-      inputs.nix-vscode-extensions.follows = "nix-vscode-extensions";
     };
   };
 
@@ -36,46 +19,24 @@
     self,
     nixpkgs,
     flake-utils,
-    nixGL,
     nix-vscode-extensions,
-    virglrenderer-debug-flake,
-    uhmitest,
   }: let
     system = "x86_64-linux";
 
     overlay = self: super: {
-      linuxPackages = super.linuxPackages_6_6;
-      linuxKernel =
-        super.linuxKernel
-        // {
-          packagesFor = kernel_: ((super.linuxKernel.packagesFor kernel_).extend (lpself: lpsuper: {
-            virtio-lo = lpsuper.callPackage ./modules {};
-            vduse = lpsuper.callPackage ./vduse {};
-          }));
-        };
-      libvirtiolo = super.callPackage ./lib {};
-
-      libvirtiolo-debug =
-        (self.libvirtiolo.overrideAttrs (_: _: {
-          cmakeBuildType = "Debug";
-          separateDebugInfo = true;
-        }))
-        .override {
-          virglrenderer = self.virglrenderer-debug;
-        };
-
-      # virglrenderer-debug = (virglrenderer-debug-flake.overlays.default self super).virglrenderer;
-
-      # virglrenderer-debug = super.virglrenderer.overrideAttrs (_: _: {
-      #   mesonFlags = ["-Dtracing=stderr"];
-      # });
-
-      virglrenderer-debug = super.virglrenderer;
-
-      uhmitest = uhmitest.packages.${system}.uhmitest;
+      # linuxPackages = super.linuxPackages_6_6;
+      # linuxKernel =
+      #   super.linuxKernel
+      #   // {
+      #     packagesFor = kernel_: ((super.linuxKernel.packagesFor kernel_).extend (lpself: lpsuper: {
+      #       virtio-lo = lpsuper.callPackage ./modules {};
+      #       vduse = lpsuper.callPackage ./vduse {};
+      #     }));
+      #   };
+      virtio-target = super.callPackage ./. {};
     };
 
-    pkgs = (nixpkgs.legacyPackages.${system}.extend overlay).extend nixGL.overlay;
+    pkgs = nixpkgs.legacyPackages.${system}.extend overlay;
 
     extensions = nix-vscode-extensions.extensions.${system};
 
@@ -91,56 +52,43 @@
     };
 
     nixos = pkgs.nixos (import ./configuration.nix);
-
-    start_gtk_test_sh = pkgs.writeShellScript "start_gtk_test.sh" ''
-      export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive";
-      export GDK_GL=gles
-      exec ${pkgs.nixgl.nixGLMesa}/bin/nixGLMesa ${pkgs.libvirtiolo-debug}/bin/gtk_test
-    '';
-
-    startvm_sh = pkgs.writeShellScript "startvm.sh" ''
-      ${pkgs.coreutils}/bin/mkdir -p ./xchg
-
-      TMPDIR=''$(pwd)
-      USE_TMPDIR=1
-      export TMPDIR USE_TMPDIR
-
-      TTY_FILE="./xchg/tty.sh"
-      read -r rows cols <<< "''$(${pkgs.coreutils}/bin/stty size)"
-
-      cat << EOF > "''${TTY_FILE}"
-      export TERM=xterm-256color
-      stty rows ''$rows cols ''$cols
-      reset
-      EOF
-
-      ${pkgs.coreutils}/bin/stty intr ^] # send INTR with Control-]
-      ${pkgs.nixgl.nixGLMesa}/bin/nixGLMesa ${nixos.vm}/bin/run-nixos-vm
-      ${pkgs.coreutils}/bin/stty intr ^c
-    '';
+    # start_gtk_test_sh = pkgs.writeShellScript "start_gtk_test.sh" ''
+    #   export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive";
+    #   export GDK_GL=gles
+    #   exec ${pkgs.nixgl.nixGLMesa}/bin/nixGLMesa ${pkgs.libvirtiolo-debug}/bin/gtk_test
+    # '';
+    #    startvm_sh = pkgs.writeShellScript "startvm.sh" ''
+    #      ${pkgs.coreutils}/bin/mkdir -p ./xchg
+    #
+    #      TMPDIR=''$(pwd)
+    #      USE_TMPDIR=1
+    #      export TMPDIR USE_TMPDIR
+    #
+    #      TTY_FILE="./xchg/tty.sh"
+    #      read -r rows cols <<< "''$(${pkgs.coreutils}/bin/stty size)"
+    #
+    #      cat << EOF > "''${TTY_FILE}"
+    #      export TERM=xterm-256color
+    #      stty rows ''$rows cols ''$cols
+    #      reset
+    #      EOF
+    #
+    #      ${pkgs.coreutils}/bin/stty intr ^] # send INTR with Control-]
+    #      ${pkgs.nixgl.nixGLMesa}/bin/nixGLMesa ${nixos.vm}/bin/run-nixos-vm
+    #      ${pkgs.coreutils}/bin/stty intr ^c
+    #    '';
   in {
     overlays.${system} = {
       default = overlay;
     };
 
     packages.${system} = rec {
-      libvirtiolo = pkgs.libvirtiolo;
-      libvirtiolo-dev = pkgs.libvirtiolo.dev;
-
-      libvirtiolo-debug = pkgs.libvirtiolo-debug;
-
-      virtio-lo = pkgs.linuxPackages.virtio-lo;
-      virtio-lo-dev = pkgs.linuxPackages.virtio-lo.dev;
-
-      vduse = pkgs.linuxPackages.vduse;
-
-      virglrenderer-debug = pkgs.virglrenderer-debug;
-
-      default = libvirtiolo;
+      virtio-target = pkgs.virtio-target;
+      default = virtio-target;
     };
 
     devShells.${system} = rec {
-      virtio-lo = with pkgs;
+      virtio-target = with pkgs;
         mkShell {
           packages = [vscode linuxPackages.virtio-lo.dev pkgs.nixgl.nixGLMesa];
           inputsFrom = [pkgs.libvirtiolo-debug] ++ linuxPackages.kernel.moduleBuildDependencies;
@@ -162,23 +110,26 @@
             echo '"defines": [ "__KERNEL__", "KBUILD_MODNAME=\"virtio-lo\"", "MODULE" ],'
           '';
         };
-      default = virtio-lo;
+      default = virtio-target;
     };
 
     apps.${system} = rec {
-      codium = {
-        type = "app";
-        program = "${vscode}/bin/codium";
+      # codium = {
+      #   type = "app";
+      #   program = "${vscode}/bin/codium";
+      # };
+      # startvm = {
+      #   type = "app";
+      #   program = "${startvm_sh}";
+      # };
+      # test_virglrenderer = {
+      #   type = "app";
+      #   program = "${startvm_sh}";
+      # };
+      # default = startvm;
+      virtio-target = {
       };
-      startvm = {
-        type = "app";
-        program = "${startvm_sh}";
-      };
-      test_virglrenderer = {
-        type = "app";
-        program = "${startvm_sh}";
-      };
-      default = startvm;
+      default = virtio-target;
     };
   };
 }
