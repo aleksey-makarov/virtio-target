@@ -1,0 +1,3301 @@
+From 7a13b310d1338c462f8e0b13d39a571645bc4698 Mon Sep 17 00:00:00 2001
+From: zhenwei pi <pizhenwei@bytedance.com>
+Date: Mon, 6 Feb 2023 08:20:18 +0800
+Subject: [PATCH] Introduce virtio over fabrics
+
+This commit includes:
+- virtio over fabrics framework
+- virtio TCP initiator
+- virtio RDMA initiator
+
+Note that this is unstable and still in development.
+
+Signed-off-by: zhenwei pi <pizhenwei@bytedance.com>
+
+diff --git a/drivers/virtio/Makefile b/drivers/virtio/Makefile
+index 8e98d24917cc..3f004cdfe714 100644
+--- a/drivers/virtio/Makefile
++++ b/drivers/virtio/Makefile
+@@ -12,3 +12,6 @@ obj-$(CONFIG_VIRTIO_INPUT) += virtio_input.o
+ obj-$(CONFIG_VIRTIO_VDPA) += virtio_vdpa.o
+ obj-$(CONFIG_VIRTIO_MEM) += virtio_mem.o
+ obj-$(CONFIG_VIRTIO_DMA_SHARED_BUFFER) += virtio_dma_buf.o
++obj-m += virtio_fabrics.o
++obj-m += virtio_tcp.o
++obj-m += virtio_rdma.o
+diff --git a/drivers/virtio/virtio_fabrics.c b/drivers/virtio/virtio_fabrics.c
+new file mode 100644
+index 000000000000..2aa971a1894b
+--- /dev/null
++++ b/drivers/virtio/virtio_fabrics.c
+@@ -0,0 +1,1391 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * VIRTIO Over Fabrics framework
++ *
++ * Copyright (c) 2023, Bytedance Inc. All rights reserved.
++ *	Author: zhenwei pi <pizhenwei@bytedance.com>
++ *
++ */
++
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/device.h>
++#include <linux/kernel.h>
++#include <linux/parser.h>
++#include <linux/miscdevice.h>
++#include <linux/seq_file.h>
++#include <linux/slab.h>
++#include <linux/uuid.h>
++#include <linux/virtio.h>
++#include <linux/virtio_config.h>
++#include <linux/virtio_ring.h>
++#include <linux/virtio_of.h>
++
++#include "virtio_fabrics.h"
++
++#define VOF_MODULE_AUTHOR 	"zhenwei pi <pizhenwei@bytedance.com>"
++#define VOF_MODULE_DESC		"VIRTIO Over Fabrics initiator framework"
++#define VOF_MODULE_LICENSE	"GPL v2"
++#define VOF_MODULE_VERSION	"0.1"
++
++#define VOF_CTRL_TIMEOUT	(3 * HZ)
++#define VOF_CTRL_QSIZE		8
++
++/* virtio-of transport */
++static LIST_HEAD(vof_transports);
++static spinlock_t vof_transports_lock;
++
++/* virtio-of classs and device */
++#define VOF_CLASS "virtio-fabrics"
++#define VOF_DEVICE "virtio-fabrics"
++
++static struct class *vof_class;
++static struct device *vof_device;	/* misc device */
++static DEFINE_MUTEX(vof_dev_mutex);
++
++/* the dynamically created devices, protected by vof_dev_mutex */
++static LIST_HEAD(vof_devices);
++
++/* workqueue for virtio-of */
++static struct workqueue_struct *vof_wq;
++
++#if 1
++#define vof_dbg(fmt, ...)
++#else
++#define vof_dbg(fmt, ...) pr_info("%s: " fmt, __func__, ##__VA_ARGS__)
++#endif
++
++enum vof_opt_type {
++	VOF_OPT_ERR = 0,
++	VOF_OPT_COMMAND,
++	VOF_OPT_TRANSPORT,
++	VOF_OPT_TADDR,
++	VOF_OPT_TPORT,
++	VOF_OPT_TVQN,
++	VOF_OPT_IADDR,
++	VOF_OPT_IPORT,
++	VOF_OPT_IVQN
++};
++
++static const match_table_t vof_opt_table = {
++	{ VOF_OPT_COMMAND,	"command=%s" },
++	{ VOF_OPT_TRANSPORT,	"transport=%s" },
++	{ VOF_OPT_TADDR,	"taddr=%s" },
++	{ VOF_OPT_TPORT,	"tport=%s"},
++	{ VOF_OPT_TVQN,		"tvqn=%s"},
++	{ VOF_OPT_IADDR,	"iaddr=%s" },
++	{ VOF_OPT_IPORT,	"iport=%s"},
++	{ VOF_OPT_IVQN,		"ivqn=%s" },
++	{ VOF_OPT_ERR,		NULL }
++};
++
++static struct vof_options *vof_alloc_options(void)
++{
++	struct vof_options *opts;
++
++	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
++	if (!opts)
++		return ERR_PTR(-ENOMEM);
++
++	kref_init(&opts->ref);
++	vof_dbg("%px\n", opts);
++
++	return opts;
++}
++
++static void vof_free_options(struct kref *ref)
++{
++	struct vof_options *opts = container_of(ref, struct vof_options, ref);
++
++	kfree(opts->command);
++	kfree(opts->transport);
++	kfree(opts->taddr);
++	kfree(opts->tport);
++	kfree(opts->tvqn);
++	kfree(opts->iaddr);
++	kfree(opts->iport);
++	kfree(opts->ivqn);
++	kfree(opts);
++
++	vof_dbg("%px\n", opts);
++}
++
++static inline void vof_get_options(struct vof_options *opts)
++{
++	kref_get(&opts->ref);
++}
++
++static void vof_put_options(struct vof_options *opts)
++{
++	if (opts)
++		kref_put(&opts->ref, vof_free_options);
++}
++
++static struct vof_options *vof_parse_options(const char *buf)
++{
++	struct vof_options *opts;
++	substring_t args[MAX_OPT_ARGS];
++	char *options, *o, *p;
++	int token, ret = -ENOMEM;
++
++	opts = vof_alloc_options();
++	if (!opts)
++		return ERR_PTR(-ENOMEM);
++
++	options = o = kstrdup(buf, GFP_KERNEL);
++	if (!options)
++		goto out;
++
++	while ((p = strsep(&o, ",\n")) != NULL) {
++		if (!*p)
++			continue;
++
++		token = match_token(p, vof_opt_table, args);
++		switch (token) {
++#define vof_str_option(field) \
++		p = match_strdup(args);	\
++		if (!p)			\
++			goto out;	\
++		kfree(opts->field);	\
++		opts->field = p;
++
++		case VOF_OPT_COMMAND:
++			vof_str_option(command);
++			break;
++		case VOF_OPT_TRANSPORT:
++			vof_str_option(transport);
++			break;
++		case VOF_OPT_TADDR:
++			vof_str_option(taddr);
++			break;
++		case VOF_OPT_TPORT:
++			vof_str_option(tport);
++			break;
++		case VOF_OPT_TVQN:
++			vof_str_option(tvqn);
++			/* sizeof vof_connect_payload::tvqn */
++			if (strlen(opts->tvqn) > 256) {
++				vof_dbg("parameter '%s' exceeds\n", p);
++				ret = -EINVAL;
++				goto out;
++			}
++			break;
++		case VOF_OPT_IADDR:
++			vof_str_option(iaddr);
++			break;
++		case VOF_OPT_IPORT:
++			vof_str_option(iport);
++			break;
++		case VOF_OPT_IVQN:
++			vof_str_option(ivqn);
++			/* sizeof vof_connect_payload::ivqn */
++			if (strlen(opts->ivqn) > 256) {
++				vof_dbg("parameter '%s' exceeds\n", p);
++				ret = -EINVAL;
++				goto out;
++			}
++			break;
++		default:
++			vof_dbg("invalid parameter '%s'\n", p);
++			ret = -EINVAL;
++			goto out;
++		}
++	}
++
++	ret = 0;
++out:
++	kfree(options);
++	if (ret) {
++		vof_put_options(opts);
++		opts = ERR_PTR(ret);
++	}
++
++	return opts;
++}
++
++int vof_register_transport(struct vof_transport_ops *ops)
++{
++	if (!ops->create || !ops->destroy)
++		return -EINVAL;
++
++	spin_lock(&vof_transports_lock);
++	list_add_tail(&ops->entry, &vof_transports);
++	spin_unlock(&vof_transports_lock);
++	vof_dbg("register transport '%s'\n", ops->transport);
++
++	return 0;
++}
++EXPORT_SYMBOL_GPL(vof_register_transport);
++
++void vof_unregister_transport(struct vof_transport_ops *ops)
++{
++	spin_lock(&vof_transports_lock);
++	list_del(&ops->entry);
++	spin_unlock(&vof_transports_lock);
++	vof_dbg("unregister transport '%s'\n", ops->transport);
++}
++EXPORT_SYMBOL_GPL(vof_unregister_transport);
++
++static struct vof_transport_ops *vof_get_transport(const char *transport)
++{
++	struct vof_transport_ops *ops;
++
++	spin_lock(&vof_transports_lock);
++	list_for_each_entry(ops, &vof_transports, entry) {
++		if (strcmp(ops->transport, transport) == 0) {
++			if (!try_module_get(ops->module))
++				ops = ERR_PTR(-EBUSY);
++
++			spin_unlock(&vof_transports_lock);
++			return ops;
++		}
++	}
++	spin_unlock(&vof_transports_lock);
++
++	return ERR_PTR(-EINVAL);
++}
++
++static inline void vof_put_transport(struct vof_transport_ops *ops)
++{
++	module_put(ops->module);
++}
++
++static inline void vof_add_device(struct vof_device *vofdev)
++{
++	lockdep_assert_held(&vof_dev_mutex);
++
++	list_add_tail(&vofdev->entry, &vof_devices);
++	vof_dbg("add device %px", vofdev);
++}
++
++static inline void vof_del_device(struct vof_device *vofdev)
++{
++	lockdep_assert_held(&vof_dev_mutex);
++
++	list_del(&vofdev->entry);
++	vof_dbg("del device %px", vofdev);
++}
++
++static struct vof_device *vof_get_device(const char *ivqn)
++{
++	struct vof_device *vofdev;
++
++	lockdep_assert_held(&vof_dev_mutex);
++
++	list_for_each_entry(vofdev, &vof_devices, entry) {
++		if (!strcmp(vofdev->opts->ivqn, ivqn))
++			return vofdev;
++	}
++
++	return NULL;
++}
++
++static struct vof_request *vof_alloc_req(struct vof_queue *vofq, u16 snd_ndesc, u16 rcv_ndesc, int command_id)
++{
++	struct vof_device *vofdev = vofq->vofdev;
++	struct xa_limit lmt = { .min = 0, .max = vofq->vring_num - 1 };
++	struct vof_request *vofreq;
++
++	vofreq = vofdev->ops->alloc_req(vofq, snd_ndesc, rcv_ndesc);
++	WARN_ON_ONCE(!vofreq);
++	if (!vofreq)
++		return NULL;
++
++	if (command_id >= 0) {
++		/* we use *head* as command_id for vring request, this should always be unique */
++		BUG_ON(xa_insert(&vofq->xa_cmds, command_id, vofreq, GFP_KERNEL));
++	} else {
++		if (xa_alloc(&vofq->xa_cmds, (u32 *)&command_id, vofreq, lmt, GFP_KERNEL)) {
++			dev_warn(&vofq->vofdev->vdev.dev, "inflight requests exceeds");
++			vofdev->ops->free_req(vofreq);
++			return NULL;
++		}
++	}
++
++	init_completion(&vofreq->comp);
++	vofreq->vofq = vofq;
++	vofreq->vofcmd->common.command_id = cpu_to_le16(command_id);
++	vofreq->vofcomp.status = cpu_to_le16(VIRTIO_OF_ETIMEDOUT);
++
++vof_dbg("vofq %px, vofreq %px\n", vofq, vofreq);
++	return vofreq;
++}
++
++static void vof_free_req(struct vof_queue *vofq, struct vof_request *vofreq)
++{
++	struct vof_device *vofdev = vofq->vofdev;
++	u16 command_id = le16_to_cpu(vofreq->vofcmd->common.command_id);
++
++vof_dbg("vofq %px, vofreq %px\n", vofq, vofreq);
++	xa_erase(&vofq->xa_cmds, command_id);
++	vofdev->ops->free_req(vofreq);
++}
++
++static int vof_connect(struct vof_queue *vofq, u16 target_id, u16 queue_id)
++{
++	struct vof_device *vofdev = vofq->vofdev;
++	struct vof_request *vofreq;
++	struct virtio_of_command_connect *cmd;
++	struct virtio_of_connect *connect = NULL;
++	struct virtio_of_completion *vofcomp;
++	struct vring_desc desc;
++	u32 length = sizeof(struct virtio_of_connect);
++	int ret = -ENOMEM;
++
++	connect = kzalloc(length, GFP_KERNEL);
++	if (!connect)
++		return -ENOMEM;
++
++	vofreq = vof_alloc_req(vofq, 1, 0, -1);
++	if (!vofreq)
++		goto free_buf;
++
++	vof_dbg("vofreq %px\n", vofreq);
++	strncpy(connect->ivqn, vofdev->opts->ivqn, sizeof(connect->ivqn));
++	strncpy(connect->tvqn, vofdev->opts->tvqn, sizeof(connect->tvqn));
++	cmd = &vofreq->vofcmd->connect;
++	cmd->opcode = cpu_to_le16(virtio_of_op_connect);
++	cmd->target_id = cpu_to_le16(target_id);
++	cmd->queue_id = cpu_to_le16(queue_id);
++	cmd->ndesc = cpu_to_le16(1);
++	cmd->oftype = vofdev->ops->oftype;
++
++	desc.addr = cpu_to_virtio64(&vofdev->vdev, virt_to_phys(connect));
++	desc.len = cpu_to_virtio32(&vofdev->vdev, length);
++	desc.flags = cpu_to_virtio16(&vofdev->vdev, 0);
++	desc.next = cpu_to_virtio16(&vofdev->vdev, 0);
++	length = 0;
++	ret = vofdev->ops->map_req(vofreq, 0, &desc, 0, &length);
++	if (ret)
++		goto free_buf;
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (!ret)
++		vofdev->target_id = le16_to_cpu(vofcomp->value.u16);
++	else
++		vof_dev_err(vofdev, "connect failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++
++free_buf:
++	kfree(connect);
++	return ret;
++}
++
++static int vof_get_vendor_id(struct virtio_device *vdev, u32 *vendor_id)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_common *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	int ret;
++
++	vof_dbg("\n");
++
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return -ENOMEM;
++
++	cmd = &vofreq->vofcmd->common;
++	cmd->opcode = cpu_to_le16(virtio_of_op_get_vendor_id);
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (!ret)
++		*vendor_id = le32_to_cpu(vofcomp->value.u32);
++	else
++		vof_dev_err(vofdev, "get vendor id failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++
++	return 0;
++}
++
++static int vof_get_device_id(struct virtio_device *vdev, u32 *device_id)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_common *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	int ret;
++
++	vof_dbg("\n");
++
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return -ENOMEM;
++
++	cmd = &vofreq->vofcmd->common;
++	cmd->opcode = cpu_to_le16(virtio_of_op_get_device_id);
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (!ret)
++		*device_id = le32_to_cpu(vofcomp->value.u32);
++	else
++		vof_dev_err(vofdev, "get device id failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++
++	return 0;
++}
++
++static int vof_get_num_queues(struct virtio_device *vdev)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_common *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	int ret;
++
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return -ENOMEM;
++
++	cmd = &vofreq->vofcmd->common;
++	cmd->opcode = cpu_to_le16(virtio_of_op_get_num_queues);
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (!ret)
++		ret = le16_to_cpu(vofcomp->value.u16);
++	else
++		vof_dev_err(vofdev, "get num queues failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++	return ret;
++}
++
++static void vof_get(struct virtio_device *vdev, unsigned int offset, void *buf, unsigned int len)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_config *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	u8 v8;
++	u16 v16;
++	u32 v32;
++	u64 v64;
++	int ret;
++
++	vof_dbg("\n");
++
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return;
++
++	cmd = &vofreq->vofcmd->config;
++	cmd->opcode = cpu_to_le16(virtio_of_op_get_config);
++	cmd->offset = cpu_to_le16(offset);
++	cmd->bytes = len;
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (ret) {
++		vof_dev_err(vofdev, "get config failed: %d", ret);
++		memset(buf, 0x00, len);
++	}
++
++	switch (len) {
++	case 1:
++		v8 = vofcomp->value.u8;
++		memcpy(buf, &v8, sizeof(v8));
++		break;
++	case 2:
++		v16 = le16_to_cpu(vofcomp->value.u16);
++		memcpy(buf, &v16, sizeof(v16));
++		break;
++	case 4:
++		v32 = le32_to_cpu(vofcomp->value.u32);
++		memcpy(buf, &v32, sizeof(v32));
++		break;
++	case 8:
++		v64 = le64_to_cpu(vofcomp->value.u64);
++		memcpy(buf, &v64, sizeof(v64));
++		break;
++	default:
++		BUG();
++	}
++
++	vof_free_req(vofq, vofreq);
++}
++
++static void vof_set(struct virtio_device *vdev, unsigned int offset, const void *buf, unsigned int len)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_config *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	u8 v8;
++	u16 v16;
++	u32 v32;
++	u64 v64;
++	int ret;
++
++	vof_dbg("\n");
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return;
++
++	cmd = &vofreq->vofcmd->config;
++	cmd->opcode = cpu_to_le16(virtio_of_op_set_config);
++	cmd->offset = cpu_to_le16(offset);
++	cmd->bytes = len;
++	switch (len) {
++	case 1:
++		memcpy(&v8, buf, sizeof(v8));
++		cmd->value.u8 = v8;
++		break;
++	case 2:
++		memcpy(&v16, buf, sizeof(v16));
++		cmd->value.u16 = cpu_to_le16(v16);
++		break;
++	case 4:
++		memcpy(&v32, buf, sizeof(v32));
++		cmd->value.u32 = cpu_to_le32(v32);
++		break;
++	case 8:
++		memcpy(&v64, buf, sizeof(v64));
++		cmd->value.u64 = cpu_to_le64(v64);
++		break;
++	default:
++		BUG();
++	}
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (ret) {
++		vof_dev_err(vofdev, "set config failed: %d", ret);
++	}
++
++	vof_free_req(vofq, vofreq);
++}
++
++static u32 vof_generation(struct virtio_device *vdev)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_common *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	u32 generation = 0;
++	int ret;
++
++	vof_dbg("\n");
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return 0;
++
++	cmd = &vofreq->vofcmd->common;
++	cmd->opcode = cpu_to_le16(virtio_of_op_get_generation);
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (!ret)
++		generation = le32_to_cpu(vofcomp->value.u32);
++	else
++		vof_dev_err(vofdev, "get generation failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++
++	return generation;
++}
++
++static u8 vof_get_status(struct virtio_device *vdev)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_status *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	u8 status = VIRTIO_CONFIG_S_FAILED;
++	int ret;
++
++	vof_dbg("\n");
++	/* once we are destroying the fabric device, network is going to disconnect */
++	if (vofdev->state == vof_dev_destroy)
++		return 0;
++
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return status;
++
++	cmd = &vofreq->vofcmd->status;
++	cmd->opcode = cpu_to_le16(virtio_of_op_get_status);
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (!ret)
++		status = vofcomp->value.u8;
++	else
++		vof_dev_err(vofdev, "get status failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++
++	return status;
++}
++
++static void vof_set_status(struct virtio_device *vdev, u8 status)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_status *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	int ret;
++
++	vof_dbg("\n");
++	if (vofdev->state == vof_dev_destroy)
++		return;
++
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return;
++
++	cmd = &vofreq->vofcmd->status;
++	cmd->opcode = cpu_to_le16(virtio_of_op_set_status);
++	cmd->status = cpu_to_le32(status);
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (ret)
++		vof_dev_err(vofdev, "set status failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++}
++
++static int vof_get_queue_size(struct virtio_device *vdev, __u16 queue_id)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_queue *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	u16 size = 0;
++	int ret;
++
++	vof_dbg("\n");
++
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return -ENOMEM;
++
++	cmd = &vofreq->vofcmd->queue;
++	cmd->opcode = cpu_to_le16(virtio_of_op_get_queue_size);
++	cmd->queue_id = cpu_to_le16(queue_id);
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (!ret)
++		size = le16_to_cpu(vofcomp->value.u16);
++	else
++		vof_dev_err(vofdev, "get queue size failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++
++	return size;
++}
++
++static void vof_reset(struct virtio_device *vdev)
++{
++	vof_set_status(vdev, 0);
++}
++
++static u64 vof_get_features(struct virtio_device *vdev)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_feature *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	u64 feature = 0;
++	int ret;
++
++	vof_dbg("\n");
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return 0;
++
++	cmd = &vofreq->vofcmd->feature;
++	cmd->opcode = cpu_to_le16(virtio_of_op_get_device_feature);
++	cmd->feature_select = cpu_to_le32(0);
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (!ret)
++		feature = le64_to_cpu(vofcomp->value.u64);
++	else
++		vof_dev_err(vofdev, "get device features failed: %d", ret);
++	//TODO disable VIRTIO_F_ACCESS_PLATFORM,VIRTIO_RING_F_INDIRECT_DESC,VIRTIO_F_ORDER_PLATFORM,VIRTIO_F_RING_PACKED
++
++	vof_free_req(vofq, vofreq);
++
++	return feature;
++}
++
++static int vof_finalize_features(struct virtio_device *vdev)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq = vofdev->ctrlq;
++	struct virtio_of_command_feature *cmd;
++	struct virtio_of_completion *vofcomp;
++	struct vof_request *vofreq;
++	int ret;
++
++	vof_dbg("\n");
++	vring_transport_features(vdev);
++
++	vofreq = vof_alloc_req(vofq, 0, 0, -1);
++	if (!vofreq)
++		return -ENOMEM;
++
++	cmd = &vofreq->vofcmd->feature;
++	cmd->opcode = cpu_to_le16(virtio_of_op_set_driver_feature);
++	cmd->feature_select = cpu_to_le32(0);
++	cmd->value = cpu_to_le64(vdev->features);
++
++	vofdev->ops->queue_req(vofreq);
++	wait_for_completion_timeout(&vofreq->comp, VOF_CTRL_TIMEOUT);
++
++	vofcomp = &vofreq->vofcomp;
++	ret = vof_status_to_errno(le16_to_cpu(vofcomp->status));
++	if (ret)
++		vof_dev_err(vofdev, "set driver features failed: %d", ret);
++
++	vof_free_req(vofq, vofreq);
++
++	return ret;
++}
++
++static int vof_handle_vq(struct virtqueue *vq)
++{
++	struct vof_device *vofdev = to_vofdev(vq->vdev);
++	struct vof_queue *vofq = vofdev->vringq[vq->index];
++	struct vof_request *vofreq;
++	struct virtio_of_command_vring *cmd;
++	struct vring *vring = &vofq->vring;
++	struct vring_desc *desc;
++	u32 total = 0;
++	u16 avail_idx, last_avail_idx, snd_ndesc = 0, rcv_ndesc = 0, i = 0;
++	u16 head, flags, next;
++	int ret;
++
++	virtio_mb(true);
++	avail_idx = virtio16_to_cpu(&vofdev->vdev, vring->avail->idx);
++	last_avail_idx = vofq->last_avail_idx;
++	if (last_avail_idx == avail_idx) {
++		return -EAGAIN;
++	}
++
++	vofq->last_avail_idx++;
++
++	head = vring->avail->ring[last_avail_idx & (vring->num - 1)];
++	head = virtio16_to_cpu(&vofdev->vdev, head);
++	BUG_ON(unlikely(head >= vring->num));
++	//vof_dbg("command_id 0x%x, last_avail_idx %d\n", head, last_avail_idx);
++
++	/* count ndesc firstly */
++	next = head;
++	do {
++		desc = vring->desc + next;
++		flags = virtio16_to_cpu(vq->vdev, desc->flags);
++		if (flags & VRING_DESC_F_WRITE)
++			rcv_ndesc++;
++		else
++			snd_ndesc++;
++		next = virtio16_to_cpu(vq->vdev, desc->next);
++	} while (flags & VRING_DESC_F_NEXT);
++
++	vofreq = vof_alloc_req(vofq, snd_ndesc, rcv_ndesc, head);
++	if (!vofreq)
++		return -ENOMEM;
++
++	/* map virtio desc to virtio-of desc */
++	next = head;
++	do {
++		desc = vring->desc + next;
++		ret = vofdev->ops->map_req(vofreq, i++, desc, next, &total);
++		next = virtio16_to_cpu(vq->vdev, desc->next);
++		flags = virtio16_to_cpu(vq->vdev, desc->flags);
++	} while (flags & VRING_DESC_F_NEXT);
++
++	cmd = &vofreq->vofcmd->vring;
++	cmd->opcode = cpu_to_le16(virtio_of_op_vring);
++	cmd->command_id = cpu_to_le16(head);
++	cmd->length = cpu_to_le32(total);
++	cmd->ndesc = cpu_to_le16(snd_ndesc + rcv_ndesc);
++	vofdev->ops->queue_req(vofreq);
++
++	return 0;
++}
++
++static bool vof_notify(struct virtqueue *vq)
++{
++	struct vof_device *vofdev = to_vofdev(vq->vdev);
++	struct vof_queue *vofq = vofdev->vringq[vq->index];
++	int ret;
++
++	if (!mutex_trylock(&vofq->vring_mutex))
++		return true;
++
++	do {
++		ret = vof_handle_vq(vq);
++	} while (!ret);
++
++	mutex_unlock(&vofq->vring_mutex);
++
++	return true;
++}
++
++static void vof_del_vqs(struct virtio_device *vdev)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq;
++	int i;
++
++	for (i = 0; i < vofdev->num_queues; i++) {
++		vofq = vofdev->vringq[i];
++		if (!vofq)
++			continue;
++
++		vofdev->ops->destroy_queue(vofq);
++		vring_del_virtqueue(vofq->vq);
++		vofdev->vringq[i] = NULL;
++		/* is there any inflight request in virtqueue? */
++		BUG_ON(!xa_empty(&vofq->xa_cmds));
++		xa_destroy(&vofq->xa_cmds);
++	}
++}
++
++static void vof_interrupt(struct vof_queue *vofq, struct virtio_of_completion *vofcomp)
++{
++	struct vof_request *vofreq;
++	struct vring *vring = &vofq->vring;
++	struct vring_avail *avail = vring->avail;
++	struct vring_used *used = vring->used;
++	struct vring_used_elem *elem;
++	u16 command_id, opcode;
++	u16 last_used_idx, flags;
++	u32 len;
++
++	command_id = le16_to_cpu(vofcomp->command_id);
++	vofreq = vof_request_load(vofq, command_id);
++	vof_dbg("command_id %d, vofreq %px\n", command_id, vofreq);
++	if (unlikely(!vofreq)) {
++		//TODO handle error
++		dev_err(&vofq->vofdev->vdev.dev, "unexpected command id");
++		return;
++	}
++
++	memcpy(&vofreq->vofcomp, vofcomp, sizeof(*vofcomp));
++	opcode = le16_to_cpu(vofreq->vofcmd->common.opcode);
++	vof_dbg("command_id %d, opcode 0x%x\n", command_id, opcode);
++	if (opcode == virtio_of_op_vring) {
++		last_used_idx = vofq->last_used_idx;
++		elem = &used->ring[last_used_idx & (vring->num - 1)];
++		elem->id = cpu_to_virtio32(&vofq->vofdev->vdev, command_id);
++		len = le32_to_cpu(vofreq->vofcomp.value.u32);
++		elem->len = cpu_to_virtio32(&vofq->vofdev->vdev, len);
++		vof_free_req(vofq, vofreq);
++
++		vofq->last_used_idx++;
++		used->idx = cpu_to_virtio16(&vofq->vofdev->vdev, vofq->last_used_idx);
++		virtio_mb(true);
++		flags = cpu_to_virtio16(&vofq->vofdev->vdev, avail->flags);
++		vof_dbg("command_id 0x%x, last_used_idx %d, len %d, flags 0x%x\n", command_id, last_used_idx, len, flags);
++		if (!(flags & VRING_AVAIL_F_NO_INTERRUPT))
++			vring_interrupt(0, vofq->vq);  //TODO use tcp queue irq id
++	} else {
++		complete(&vofreq->comp);
++	}
++}
++
++static struct vof_queue *vof_create_queue(struct vof_device *vofdev, u16 target_id, u16 queue_id, u32 vring_num)
++{
++	struct vof_queue *vofq;
++	int ret;
++
++	vofq = vofdev->ops->create_queue(vofdev, vring_num);
++	if (IS_ERR(vofq))
++		return vofq;
++
++	vofq->interrupt = vof_interrupt;
++	xa_init_flags(&vofq->xa_cmds, XA_FLAGS_ALLOC);
++	mutex_init(&vofq->vring_mutex);
++	ret = vof_connect(vofq, target_id, queue_id);
++	if (ret < 0)
++		goto destroy_queue;
++
++	return vofq;
++
++destroy_queue:
++	vofdev->ops->destroy_queue(vofq);
++
++	return ERR_PTR(ret);
++}
++
++static struct virtqueue *vof_setup_vq(struct virtio_device *vdev, unsigned int index,
++		void (*callback)(struct virtqueue *vq),
++		const char *name, bool ctx)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_queue *vofq;
++	struct virtqueue *vq;
++	void *vring_addr;
++	int qsize;
++	int ret;
++
++	BUG_ON(index >= vofdev->num_queues);
++	BUG_ON(vofdev->vringq[index]);
++
++	qsize = vof_get_queue_size(vdev, index);
++	if (!is_power_of_2(qsize)) {
++		dev_err(&vofdev->vdev.dev, "bad queue size %u", qsize);
++		return ERR_PTR(-EINVAL);
++	}
++	vof_dbg("queue %d, queue size %d\n", index, qsize);
++
++	vofq = vof_create_queue(vofdev, vofdev->target_id, index, qsize);
++	if (IS_ERR(vofq))
++		return ERR_PTR(PTR_ERR(vofq));
++
++	vq = vring_create_virtqueue(index, qsize, SMP_CACHE_BYTES, vdev,
++			true, true, ctx, vof_notify, callback, name);
++	if (!vq) {
++		ret = -ENOMEM;
++		goto destroy_queue;
++	}
++
++	vring_addr = phys_to_virt(virtqueue_get_desc_addr(vq));
++	vring_init(&vofq->vring, qsize, vring_addr, SMP_CACHE_BYTES);
++	vofq->vq = vq;
++	vofdev->vringq[index] = vofq;
++
++	return vq;
++
++destroy_queue:
++	vofdev->ops->destroy_queue(vofq);
++
++	return ERR_PTR(ret);
++}
++
++static int vof_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
++		struct virtqueue *vqs[],
++		vq_callback_t *callbacks[],
++		const char * const names[],
++		const bool *ctx,
++		struct irq_affinity *desc)
++{
++	struct vof_device *vofdev = to_vofdev(vdev);
++	int i;
++
++	for (i = 0; i < nvqs; ++i) {
++		if (!names[i]) {
++			vqs[i] = NULL;
++			continue;
++		}
++
++		vqs[i] = vof_setup_vq(vdev, i, callbacks[i], names[i],
++				ctx ? ctx[i] : false);
++		if (IS_ERR(vqs[i])) {
++			dev_err(&vdev->dev, "setup vq %d failed: %d", i, (int)PTR_ERR(vqs[i]));
++			vof_del_vqs(vdev);
++			return PTR_ERR(vqs[i]);
++		}
++	}
++
++	/* all the virtqueues connectect successfully */
++	vofdev->state = vof_dev_established;
++
++	return 0;
++}
++
++static const char *vof_bus_name(struct virtio_device *vdev)
++{
++	return "virtio-fabrics";
++}
++
++static const struct virtio_config_ops vof_config_ops = {
++	.get			= vof_get,
++	.set			= vof_set,
++	.generation		= vof_generation,
++	.get_status		= vof_get_status,
++	.set_status		= vof_set_status,
++	.reset			= vof_reset,
++	.find_vqs		= vof_find_vqs,
++	.del_vqs		= vof_del_vqs,
++	.get_features		= vof_get_features,
++	.finalize_features	= vof_finalize_features,
++	.bus_name		= vof_bus_name,
++};
++
++static int vof_create_ctrlq(struct vof_device *vofdev)
++{
++	int ret;
++
++	vofdev->ctrlq = vof_create_queue(vofdev, 0xffff, 0, VOF_CTRL_QSIZE);
++	if (IS_ERR(vofdev->ctrlq))
++		return PTR_ERR(vofdev->ctrlq);
++
++	ret = vof_get_num_queues(&vofdev->vdev);
++	if (ret <= 0) {
++		/* TODO: virtio spec define 0 queue of a device, but we can't do anything */
++		vof_dev_err(vofdev, "get num queues from failed: %d", ret);
++		goto error;
++	}
++
++	vofdev->num_queues = ret;
++	vofdev->vringq = kcalloc(vofdev->num_queues, sizeof(struct vof_queue *), GFP_KERNEL);
++	if (!vofdev->vringq) {
++		ret = -ENOMEM;
++		goto error;
++	}
++
++	return 0;
++
++error:
++	vofdev->ops->destroy_queue(vofdev->ctrlq);
++
++	return ret;
++}
++
++static void vof_release_device(struct device *dev)
++{
++	struct virtio_device *vdev = dev_to_virtio(dev);
++	struct vof_device *vofdev = to_vofdev(vdev);
++	struct vof_transport_ops *ops = vofdev->ops;
++	struct xarray *xa_cmds = &vofdev->ctrlq->xa_cmds;
++	struct vof_request *vofreq;
++	unsigned long command_id;
++
++	xa_lock(xa_cmds);
++	xa_for_each(xa_cmds, command_id, vofreq) {
++pr_err("TODO: vof_release_device\n");	//TODO
++	}
++	xa_unlock(xa_cmds);
++	xa_destroy(xa_cmds);
++	ops->destroy_queue(vofdev->ctrlq);
++	ops->destroy(vofdev);
++}
++
++static void vof_device_state_change(struct vof_device *vofdev, enum vof_device_state new_state)
++{
++vof_dev_warn(vofdev, "state change from %d to %d\n", vofdev->state, new_state);
++	if (vofdev->state == new_state)
++		return;
++
++	if (new_state == vof_dev_disconnected) {
++		switch (vofdev->state) {
++		case vof_dev_create:
++			vofdev->state = vof_dev_error;
++			return;
++		case vof_dev_established:
++			vofdev->state = vof_dev_recovery;
++			//TODO queue recovery work
++			return;
++		default:
++			break;
++		}
++	}
++
++	vofdev->state = new_state;
++}
++
++static int vof_create_device(struct vof_options *opts)
++{
++	struct vof_transport_ops *ops;
++	struct vof_device *vofdev;
++	u32 vendor_id, device_id;
++	int ret = 0;
++
++	lockdep_assert_held(&vof_dev_mutex);
++
++	if (!opts->transport || !opts->taddr || !opts->tport || !opts->tvqn || !opts->ivqn)
++		return -EINVAL;
++
++	if (vof_get_device(opts->ivqn)) {
++		pr_info("IVQN '%s' already in use\n", opts->ivqn);
++		return -EBUSY;
++	}
++
++	request_module("virtio-%s", opts->transport);
++	ops = vof_get_transport(opts->transport);
++	if (IS_ERR(ops)) {
++		pr_info("couldn't find transport '%s'\n", opts->transport);
++		return PTR_ERR(ops);
++	}
++
++	vof_get_options(opts);
++	vofdev = ops->create(opts);
++	if (IS_ERR(vofdev)) {
++		ret = PTR_ERR(vofdev);
++		goto put_options;
++	}
++
++	vofdev->state = vof_dev_create;
++	vofdev->state_change = vof_device_state_change;
++	vofdev->ops = ops;
++	ret = vof_create_ctrlq(vofdev);
++	if (ret)
++		goto destroy_dev;
++
++	ret = vof_get_vendor_id(&vofdev->vdev, &vendor_id);
++	if (ret < 0) {
++		vof_dev_err(vofdev, "get vendor id failed: %d", ret);
++		goto destroy_dev;
++	}
++
++	ret = vof_get_device_id(&vofdev->vdev, &device_id);
++	if (ret < 0) {
++		vof_dev_err(vofdev, "get device id failed: %d", ret);
++		goto destroy_dev;
++	}
++
++	vofdev->vdev.id.vendor = vendor_id;
++	vofdev->vdev.id.device = device_id;
++	vofdev->vdev.config = &vof_config_ops;
++	vofdev->vdev.dev.parent = vof_device;
++	vofdev->vdev.dev.release = vof_release_device;
++	ret = register_virtio_device(&vofdev->vdev);
++	if (ret)
++		goto destroy_dev;
++
++	vof_add_device(vofdev);
++
++	return 0;
++
++destroy_dev:
++	ops->destroy(vofdev);
++
++put_options:
++	vof_put_options(opts);
++	vof_put_transport(ops);
++
++	return ret;
++}
++
++static int vof_destroy_device(struct vof_options *opts)
++{
++	struct vof_device *vofdev;
++	struct vof_transport_ops *ops;
++
++	lockdep_assert_held(&vof_dev_mutex);
++
++	vofdev = vof_get_device(opts->ivqn);
++	if (!vofdev)
++		return -EINVAL;
++
++	ops = vofdev->ops;
++	vofdev->state = vof_dev_destroy;
++	unregister_virtio_device(&vofdev->vdev);
++	vof_put_transport(ops);
++	vof_del_device(vofdev);
++	vof_put_options(vofdev->opts);
++
++	return 0;
++}
++
++static ssize_t vof_dev_write(struct file *file, const char __user *ubuf, size_t count, loff_t *pos)
++{
++	struct seq_file *seq_file = file->private_data;
++	struct vof_options *opts;
++	const char *buf;
++	int ret = 0;
++
++	if (count > PAGE_SIZE)
++		return -ENOMEM;
++
++	buf = memdup_user_nul(ubuf, count);
++	if (IS_ERR(buf))
++		return PTR_ERR(buf);
++
++	opts = vof_parse_options(buf);
++	if (IS_ERR(opts)) {
++		ret = PTR_ERR(opts);
++		goto freebuf;
++	}
++
++	mutex_lock(&vof_dev_mutex);
++	if (seq_file->private) {
++		ret = -EINVAL;
++		goto unlock;
++	}
++
++	if (!strcmp(opts->command, "create"))
++		ret = vof_create_device(opts);
++	else if (!strcmp(opts->command, "destroy"))
++		ret = vof_destroy_device(opts);
++	else
++		ret = -EINVAL;
++
++	seq_file->private = ERR_PTR(-EINVAL);
++
++unlock:
++	mutex_unlock(&vof_dev_mutex);
++	vof_put_options(opts);
++
++freebuf:
++	kfree(buf);
++
++	return ret ? ret : count;
++}
++
++static int vof_dev_show(struct seq_file *seq_file, void *private)
++{
++	const struct match_token *tok;
++	int idx;
++
++	mutex_lock(&vof_dev_mutex);
++	for (idx = 0; idx < ARRAY_SIZE(vof_opt_table); idx++) {
++		tok = &vof_opt_table[idx];
++		if (tok->token == VOF_OPT_ERR)
++			continue;
++		if (idx)
++			seq_puts(seq_file, ",");
++		seq_puts(seq_file, tok->pattern);
++	}
++	seq_puts(seq_file, "\n");
++	mutex_unlock(&vof_dev_mutex);
++
++	return 0;
++}
++
++static int vof_dev_open(struct inode *inode, struct file *file)
++{
++	file->private_data = NULL;
++	return single_open(file, vof_dev_show, NULL);
++}
++
++static int vof_dev_release(struct inode *inode, struct file *file)
++{
++	return single_release(inode, file);
++}
++
++static const struct file_operations vof_dev_fops = {
++	.owner= THIS_MODULE,
++	.write= vof_dev_write,
++	.read = seq_read,
++	.open = vof_dev_open,
++	.release = vof_dev_release,
++};
++
++static struct miscdevice vof_misc = {
++	.minor= MISC_DYNAMIC_MINOR,
++	.name = VOF_DEVICE,
++	.fops = &vof_dev_fops,
++};
++
++static void inline vof_build_check(void)
++{
++	BUILD_BUG_ON(sizeof(struct virtio_of_command) != sizeof(struct virtio_of_command_common));
++	BUILD_BUG_ON(sizeof(struct virtio_of_command) != sizeof(struct virtio_of_command_connect));
++	BUILD_BUG_ON(sizeof(struct virtio_of_command) != sizeof(struct virtio_of_command_feature));
++	BUILD_BUG_ON(sizeof(struct virtio_of_command) != sizeof(struct virtio_of_command_queue));
++	BUILD_BUG_ON(sizeof(struct virtio_of_command) != sizeof(struct virtio_of_command_config));
++	BUILD_BUG_ON(sizeof(struct virtio_of_command) != sizeof(struct virtio_of_command_status));
++	BUILD_BUG_ON(sizeof(struct virtio_of_command) != sizeof(struct virtio_of_command_vring));
++	BUILD_BUG_ON(sizeof(struct virtio_of_connect) != 1024);
++}
++
++static int __init vof_init(void)
++{
++	int ret;
++
++	vof_build_check();
++
++	vof_class = class_create(THIS_MODULE, VOF_CLASS);
++	if (IS_ERR(vof_class)) {
++		pr_err("couldn't create class '%s'\n", VOF_CLASS);
++		ret = PTR_ERR(vof_class);
++		goto err;
++	}
++
++	vof_device = device_create(vof_class, NULL, MKDEV(0, 0), NULL, "ctl");
++	if (IS_ERR(vof_device)) {
++		pr_err("couldn't create '%s'\n", VOF_DEVICE);
++		ret = PTR_ERR(vof_device);
++		goto destroy_class;
++	}
++
++	ret = misc_register(&vof_misc);
++	if (ret) {
++		pr_err("couldn't register misc device: %d\n", ret);
++		goto destroy_device;
++	}
++
++	spin_lock_init(&vof_transports_lock);
++	vof_wq = alloc_workqueue("virtio-of_wq", WQ_MEM_RECLAIM, 0);
++	if (!vof_wq) {
++		ret = -ENOMEM;
++		goto destroy_misc;
++	}
++
++	return 0;
++
++destroy_misc:
++	misc_deregister(&vof_misc);
++
++destroy_device:
++	device_destroy(vof_class, MKDEV(0, 0));
++
++destroy_class:
++	class_destroy(vof_class);
++
++err:
++	return ret;
++}
++
++static void __exit vof_exit(void)
++{
++	destroy_workqueue(vof_wq);
++	misc_deregister(&vof_misc);
++	device_destroy(vof_class, MKDEV(0, 0));
++	class_destroy(vof_class);
++}
++
++module_init(vof_init);
++module_exit(vof_exit);
++
++MODULE_AUTHOR(VOF_MODULE_AUTHOR);
++MODULE_DESCRIPTION(VOF_MODULE_DESC);
++MODULE_LICENSE(VOF_MODULE_LICENSE);
++MODULE_VERSION(VOF_MODULE_VERSION);
+diff --git a/drivers/virtio/virtio_fabrics.h b/drivers/virtio/virtio_fabrics.h
+new file mode 100644
+index 000000000000..2ceba0fda1cd
+--- /dev/null
++++ b/drivers/virtio/virtio_fabrics.h
+@@ -0,0 +1,138 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/*
++ * VIRTIO Over Fabrics framework
++ *
++ * Copyright (c) 2023, Bytedance Inc. All rights reserved.
++ *  Author: zhenwei pi <pizhenwei@bytedance.com>
++ *
++ */
++#ifndef _DRIVERS_VIRTIO_VIRTIO_FABRICS_H
++#define _DRIVERS_VIRTIO_VIRTIO_FABRICS_H
++
++#include <linux/module.h>
++#include <linux/virtio_config.h>
++#include <linux/virtio_of.h>
++#include <linux/virtio_ring.h>
++
++struct vof_request {
++	struct vof_queue *vofq;
++	struct virtio_of_command *vofcmd;
++	struct virtio_of_completion vofcomp;
++	struct completion comp;
++};
++
++struct vof_queue {
++	struct vof_device *vofdev;
++	void (*interrupt)(struct vof_queue *vofq, struct virtio_of_completion *vofcomp);
++	struct xarray xa_cmds;
++	u32 vring_num;
++
++	struct mutex vring_mutex;
++	struct virtqueue *vq;
++	struct vring vring;
++	u16 last_avail_idx;
++	u16 last_used_idx;
++};
++
++enum vof_device_state {
++	vof_dev_create,
++	vof_dev_established,
++	vof_dev_disconnected,
++	vof_dev_recovery,
++	vof_dev_error,
++	vof_dev_destroy
++};
++
++struct vof_device {
++	struct virtio_device vdev;
++	struct list_head entry;
++	struct vof_transport_ops *ops;
++	struct vof_options *opts;
++
++	struct delayed_work recovery_work;
++	enum vof_device_state state;
++	void (*state_change)(struct vof_device *vofdev, enum vof_device_state state);
++	u16 target_id;
++	u32 num_queues;
++	struct vof_queue *ctrlq;
++	struct vof_queue **vringq;
++};
++
++static inline struct vof_device *to_vofdev(struct virtio_device *vdev)
++{
++	return container_of(vdev, struct vof_device, vdev);
++}
++
++#define vof_dev_err(vofdev, fmt, ...)							\
++	pr_err("%s://%s:%s/%s: " fmt, vofdev->opts->transport, vofdev->opts->taddr,	\
++		vofdev->opts->tport, vofdev->opts->tvqn, ##__VA_ARGS__)
++
++#define vof_dev_warn(vofdev, fmt, ...)							\
++	pr_warn("%s://%s:%s/%s: " fmt, vofdev->opts->transport, vofdev->opts->taddr,	\
++		vofdev->opts->tport, vofdev->opts->tvqn, ##__VA_ARGS__)
++
++
++#define VOF_TIMEOUT	(3 * HZ)
++
++struct vof_options {
++	struct kref ref;
++	unsigned int mask;
++	char *command;
++	char *transport;
++	char *taddr;
++	char *tport;
++	char *tvqn;
++	char *iaddr;
++	char *iport;
++	char *ivqn;
++};
++
++struct vof_transport_ops {
++	const char *transport;
++	enum virtio_of_connection_type oftype;
++	struct module *module;
++	struct list_head entry;
++
++	/* create a virtio-of device */
++	struct vof_device *(*create)(struct vof_options *opts);
++	/* destroy a virtio-of device */
++	void (*destroy)(struct vof_device *vofdev);
++
++	/* create a queue of a virtio-of device */
++	struct vof_queue *(*create_queue)(struct vof_device *vofdev, u32 vring_num);
++	/* destroy a queue of a virtio-of device */
++	void (*destroy_queue)(struct vof_queue *vofq);
++
++	/* allocate a request of a virtio-of queue */
++	struct vof_request *(*alloc_req)(struct vof_queue *vofq, u16 snd_ndesc, u16 rcv_ndesc);
++	/* free a request of a virtio-of queue */
++	void (*free_req)(struct vof_request *vofreq);
++	/* map a vring desc to a virtio-of desc */
++	int (*map_req)(struct vof_request *vofreq, u16 idx, struct vring_desc *desc, u16 id, u32 *length);
++	/* queue a request into q virtio-of queue, wait the completion asynchronously */
++	int (*queue_req)(struct vof_request *vofreq);
++};
++
++static inline int vof_status_to_errno(u16 status)
++{
++	if (status < VIRTIO_OF_EQUIRK)
++		return -status;
++
++	return -VIRTIO_OF_EQUIRK;
++}
++
++static inline struct vof_request *vof_request_load(struct vof_queue *vofq, u16 command_id)
++{
++	struct vof_request *vofreq;
++
++	xa_lock(&vofq->xa_cmds);
++	vofreq = xa_load(&vofq->xa_cmds, command_id);
++	xa_unlock(&vofq->xa_cmds);
++
++	return vofreq;
++}
++
++int vof_register_transport(struct vof_transport_ops *ops);
++void vof_unregister_transport(struct vof_transport_ops *ops);
++
++#endif
+diff --git a/drivers/virtio/virtio_rdma.c b/drivers/virtio/virtio_rdma.c
+new file mode 100644
+index 000000000000..9565be2ed7f8
+--- /dev/null
++++ b/drivers/virtio/virtio_rdma.c
+@@ -0,0 +1,688 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * VIRTIO Over RDMA initiator
++ *
++ * Copyright (c) 2023, Bytedance Inc. All rights reserved.
++ *	Author: zhenwei pi <pizhenwei@bytedance.com>
++ *
++ */
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/device.h>
++#include <linux/kernel.h>
++#include <linux/parser.h>
++#include <linux/miscdevice.h>
++#include <linux/seq_file.h>
++#include <linux/slab.h>
++#include <linux/uuid.h>
++#include <linux/virtio.h>
++#include <linux/virtio_config.h>
++#include <linux/virtio_ring.h>
++#include <linux/virtio_of.h>
++#include <linux/inet.h>
++#include <linux/virtio_of.h>
++#include <rdma/rdma_cm.h>
++
++#include "virtio_fabrics.h"
++
++#define VRDMA_MODULE_AUTHOR	"zhenwei pi <pizhenwei@bytedance.com>"
++#define VRDMA_MODULE_DESC	"VIRTIO Over RDMA initiator"
++#define VRDMA_MODULE_LICENSE	"GPL v2"
++#define VRDMA_MODULE_VERSION	"0.1"
++
++struct vrdma_completion {
++	struct virtio_of_completion vofcomp;
++	struct ib_cqe cqe;
++	u64 dma;
++	struct vrdma_queue *vrdmaq;
++};
++
++struct vrdma_mem {
++	struct scatterlist sg;
++	struct ib_cqe cqe;
++	struct ib_mr *mr;
++};
++
++struct vrdma_request {
++	struct vof_request vofreq;
++	struct virtio_of_vring_desc *vofdescs;
++	u16 ndesc;
++	u64 dma;		/* DMA address for vofcmd + vofdescs */
++	struct ib_cqe cqe;	/* CQE for command */
++	struct vrdma_mem *vmem;
++};
++
++struct vrdma_queue {
++	struct vof_queue vofq;
++	struct work_struct work;
++	struct completion cm_comp;
++	struct rdma_cm_id *cm_id;
++	struct ib_pd *pd;
++	struct ib_cq *cq;
++	struct vrdma_completion *vrdmacomp;
++	int state;
++};
++
++struct vrdma_device {
++	struct vof_device vofdev;
++	struct sockaddr_storage taddr;
++	struct sockaddr_storage iaddr;
++};
++
++static inline struct vrdma_request *to_vrdmareq(struct vof_request *vofreq)
++{
++	return container_of(vofreq, struct vrdma_request, vofreq);
++}
++
++static inline struct vrdma_queue *to_vrdmaq(struct vof_queue *vofq)
++{
++	return container_of(vofq, struct vrdma_queue, vofq);
++}
++
++static inline struct vrdma_device *to_vrdmadev(struct vof_device *vofdev)
++{
++	return container_of(vofdev, struct vrdma_device, vofdev);
++}
++
++static int vrdma_post_recv(struct vrdma_queue *vrdmaq, struct vrdma_completion *vrdmacomp)
++{
++	struct ib_recv_wr wr;
++	struct ib_sge sge;
++	int ret;
++
++	sge.addr   = vrdmacomp->dma;
++	sge.length = sizeof(struct virtio_of_completion);
++	sge.lkey   = vrdmaq->pd->local_dma_lkey;
++
++	wr.next     = NULL;
++	wr.wr_cqe   = &vrdmacomp->cqe;
++	wr.sg_list  = &sge;
++	wr.num_sge  = 1;
++
++	ret = ib_post_recv(vrdmaq->cm_id->qp, &wr, NULL);
++	if (unlikely(ret)) {
++		dev_err(&vrdmaq->vofq.vofdev->vdev.dev, "ib_post_recv failed: %d\n", ret);
++	}
++
++	return ret;
++}
++
++static void vrdma_recv_done(struct ib_cq *cq, struct ib_wc *wc)
++{
++	struct vrdma_completion *vrdmacomp = container_of(wc->wr_cqe, struct vrdma_completion, cqe);
++	struct vrdma_queue *vrdmaq = vrdmacomp->vrdmaq;
++	struct vof_queue *vofq = &vrdmaq->vofq;
++	char *reason;
++
++	if (unlikely(wc->status != IB_WC_SUCCESS)) {
++		reason = "rdma recv status error";
++		goto error;
++	}
++
++	if (unlikely(wc->byte_len != sizeof(struct virtio_of_completion))) {
++		reason = "rdma recv unexpected completion length";
++		goto error;
++	}
++
++	vofq->interrupt(vofq, &vrdmacomp->vofcomp);
++	vrdma_post_recv(vrdmaq, vrdmacomp);
++
++	return;
++
++error:
++	return;
++}
++
++static inline enum dma_data_direction vrdma_dma_direction(__u16 flags)
++{
++	if (flags & VRING_DESC_F_WRITE)
++		return DMA_FROM_DEVICE;
++	else
++		return DMA_TO_DEVICE;
++}
++
++static void vrdma_mem_dereg(struct vrdma_queue *vrdmaq, struct vrdma_mem *vmem, __u16 flags)
++{
++	struct ib_device *ibdev = vrdmaq->cm_id->device;
++	enum dma_data_direction dir = vrdma_dma_direction(flags);
++
++	ib_dereg_mr(vmem->mr);
++	ib_dma_unmap_sg(ibdev, &vmem->sg, 1, dir);
++}
++
++static void vrdma_mem_reg_done(struct ib_cq *cq, struct ib_wc *wc)
++{
++}
++
++static int vrdma_mem_reg(struct vrdma_queue *vrdmaq, struct vrdma_mem *vmem, void *vaddr, int length, __u16 flags)
++{
++	struct ib_device *ibdev = vrdmaq->cm_id->device;
++	struct ib_mr *mr;
++	struct ib_reg_wr reg_wr;
++	enum dma_data_direction dir = vrdma_dma_direction(flags);
++	int access = IB_ACCESS_LOCAL_WRITE;
++	int ret;
++
++	if (dir == DMA_TO_DEVICE)
++		access |= IB_ACCESS_REMOTE_READ;
++	else if (dir == DMA_FROM_DEVICE)
++		access |= IB_ACCESS_REMOTE_WRITE;
++
++	mr = ib_alloc_mr(vrdmaq->pd, IB_MR_TYPE_MEM_REG, length);
++	if (IS_ERR(mr)) {
++		dev_err(&vrdmaq->vofq.vofdev->vdev.dev, "ib_alloc_mr length(%d) failed: %d\n", length, (int)PTR_ERR(mr));
++		return PTR_ERR(mr);
++	}
++
++	sg_init_one(&vmem->sg, vaddr, length);
++	ret = ib_dma_map_sg(ibdev, &vmem->sg, 1, dir);
++	if (ret != 1) {
++		dev_err(&vrdmaq->vofq.vofdev->vdev.dev, "ib_dma_map_sg length(%d) with dir(%d) failed: %d\n", length, dir, ret);
++		ret = ret < 0 ? ret : -EIO;
++		goto dereg_mr;
++	}
++
++	ret = ib_map_mr_sg(mr, &vmem->sg, 1, NULL, SZ_4K);
++	if (ret != 1) {
++		dev_err(&vrdmaq->vofq.vofdev->vdev.dev, "ib_map_mr_sg length(%d) with dir(%d) failed: %d\n", length, dir, ret);
++		ret = ret < 0 ? ret : -EINVAL;
++		goto unmap_sg;
++	}
++
++	vmem->mr = mr;
++	vmem->cqe.done = vrdma_mem_reg_done;
++
++	memset(&reg_wr, 0, sizeof(struct ib_reg_wr));
++	reg_wr.wr.next = NULL;
++	reg_wr.wr.opcode = IB_WR_REG_MR;
++	reg_wr.wr.wr_cqe = &vmem->cqe;
++	reg_wr.wr.num_sge = 0;
++	reg_wr.wr.send_flags = IB_SEND_SIGNALED;
++	reg_wr.mr = mr;
++	reg_wr.key = mr->rkey;
++	reg_wr.access = access;
++
++	ret = ib_post_send(vrdmaq->cm_id->qp, &reg_wr.wr, NULL);
++	if (ret) {
++		dev_err(&vrdmaq->vofq.vofdev->vdev.dev, "ib_post_send reg MR failed: %d\n", ret);
++		goto unmap_sg;
++	}
++
++	return 0;
++
++unmap_sg:
++	ib_dma_unmap_sg(ibdev, &vmem->sg, 1, dir);
++
++dereg_mr:
++	ib_dereg_mr(mr);
++
++	return ret;
++}
++
++static void vrdma_free_completion(struct vrdma_queue *vrdmaq, u32 size)
++{
++	struct vrdma_completion *vrdmacomp;
++	struct ib_device *ibdev = vrdmaq->cm_id->device;
++	int i;
++
++	for (i = 0; i < size; i++) {
++		vrdmacomp = vrdmaq->vrdmacomp + i;
++		ib_dma_unmap_single(ibdev, vrdmacomp->dma, sizeof(struct vrdma_completion), DMA_FROM_DEVICE);
++	}
++
++	kfree(vrdmaq->vrdmacomp);
++	vrdmaq->vrdmacomp = NULL;
++}
++
++static int vrdma_alloc_completion(struct vrdma_queue *vrdmaq)
++{
++	struct vrdma_completion *vrdmacomp;
++	struct ib_device *ibdev = vrdmaq->cm_id->device;
++	u32 vring_num = vrdmaq->vofq.vring_num;
++	int i;
++
++	vrdmaq->vrdmacomp = kzalloc(vring_num * sizeof(struct vrdma_completion), GFP_KERNEL);
++	if (!vrdmaq->vrdmacomp)
++		return -ENOMEM;
++
++	for (i = 0; i < vring_num; i++) {
++		vrdmacomp = vrdmaq->vrdmacomp + i;
++		vrdmacomp->cqe.done = vrdma_recv_done;
++		vrdmacomp->vrdmaq = vrdmaq;
++		vrdmacomp->dma = ib_dma_map_single(ibdev, &vrdmacomp->vofcomp, sizeof(struct virtio_of_completion), DMA_FROM_DEVICE);
++		if (ib_dma_mapping_error(ibdev, vrdmacomp->dma)) {
++			pr_err("ib_dma_map_single for completion failed\n");
++			goto error;
++		}
++	}
++
++	return 0;
++
++error:
++	vrdma_free_completion(vrdmaq, i);
++	return -ENOMEM;
++}
++
++static struct vof_request *vrdma_alloc_req(struct vof_queue *vofq, u16 snd_ndesc, u16 rcv_ndesc)
++{
++	struct vrdma_queue *vrdmaq = to_vrdmaq(vofq);
++	struct ib_device *ibdev = vrdmaq->cm_id->device;
++	struct vrdma_request *vrdmareq;
++	struct virtio_of_command *vofcmd;
++	u64 dma;
++	int length;
++	u16 ndesc = snd_ndesc + rcv_ndesc;
++
++	/* To reduce kzalloc: combine the request buffer into a single one.
++	 * The memory has a layout(vofcmd & descs MUST be continuous):
++	 * | vrdmareq     |
++	 * | vofcmd       |
++	 * | desc * ndesc | (snd desc only, no rcv desc)
++	 * | vmem * ndesc |
++	 */
++	length = sizeof(struct vrdma_request);
++	length += sizeof(struct virtio_of_command);
++	length += sizeof(struct virtio_of_vring_desc) * ndesc;
++	length += sizeof(struct vrdma_mem) * ndesc;
++	vrdmareq = kzalloc(length, GFP_KERNEL);
++	if (!vrdmareq)
++		return NULL;
++
++	vofcmd = (struct virtio_of_command *)(vrdmareq + 1);
++	vrdmareq->vofreq.vofcmd = vofcmd;
++	if (ndesc) {
++		vrdmareq->vofdescs = (struct virtio_of_vring_desc *)(vofcmd + 1);
++		vrdmareq->ndesc = ndesc;
++		vrdmareq->vmem = (struct vrdma_mem *)(vrdmareq->vofdescs + ndesc);
++	}
++
++	length = sizeof(struct virtio_of_command);
++	length += sizeof(struct virtio_of_vring_desc) * ndesc;
++	dma = ib_dma_map_single(ibdev, vofcmd, length, DMA_TO_DEVICE);
++	if (unlikely(ib_dma_mapping_error(ibdev, dma))) {
++		dev_err(&vofq->vofdev->vdev.dev, "ib_dma_map_single for command length(%d) failed\n", length);
++		goto error;
++	}
++
++	ib_dma_sync_single_for_cpu(ibdev, dma, length, DMA_TO_DEVICE);
++	vrdmareq->dma = dma;
++
++	return &vrdmareq->vofreq;
++
++error:
++	kfree(vrdmareq);
++	return NULL;
++}
++
++static void vrdma_free_req(struct vof_request *vofreq)
++{
++	struct vrdma_request *vrdmareq = to_vrdmareq(vofreq);
++	struct vrdma_queue *vrdmaq = to_vrdmaq(vofreq->vofq);
++	struct ib_device *ibdev = vrdmaq->cm_id->device;
++	struct virtio_of_vring_desc *vofdesc;
++	struct vrdma_mem *vmem;
++	int length;
++	u16 idx;
++
++	length = sizeof(struct virtio_of_command);
++	length += sizeof(struct virtio_of_vring_desc) * vrdmareq->ndesc;
++	ib_dma_unmap_single(ibdev, vrdmareq->dma, length, DMA_TO_DEVICE);
++
++	for (idx = 0; idx < vrdmareq->ndesc; idx++) {
++		vmem = vrdmareq->vmem + idx;
++		vofdesc = vrdmareq->vofdescs + idx;
++		vrdma_mem_dereg(vrdmaq, vmem, le16_to_cpu(vofdesc->flags));
++	}
++
++	kfree(vrdmareq);
++}
++
++static int vrdma_map_req(struct vof_request *vofreq, u16 idx, struct vring_desc *desc, u16 id, u32 *_length)
++{
++	struct vrdma_request *vrdmareq = to_vrdmareq(vofreq);
++	struct vrdma_queue *vrdmaq = to_vrdmaq(vofreq->vofq);
++	struct vof_device *vofdev = vofreq->vofq->vofdev;
++	struct virtio_of_vring_desc *vofdesc = vrdmareq->vofdescs + idx;
++	struct vrdma_mem *vmem = vrdmareq->vmem + idx;
++	void *addr;
++	u32 length;
++	u16 flags;
++	int ret;
++
++	addr = phys_to_virt(virtio64_to_cpu(&vofdev->vdev, desc->addr));
++	length = virtio32_to_cpu(&vofdev->vdev, desc->len);
++	flags = virtio16_to_cpu(&vofdev->vdev, desc->flags);
++	ret = vrdma_mem_reg(vrdmaq, vmem, addr, length, flags);
++	if (ret)
++		return ret;
++
++	vofdesc->addr = cpu_to_le64(vmem->mr->iova);
++	vofdesc->length = cpu_to_le32(length);
++	vofdesc->id = cpu_to_le16(id);
++	vofdesc->flags = cpu_to_le16(flags);
++	vofdesc->key = cpu_to_le32(vmem->mr->rkey);
++
++	return 0;
++}
++
++static void vrdma_send_done(struct ib_cq *cq, struct ib_wc *wc)
++{
++	struct vrdma_request *vrdmareq = container_of(wc->wr_cqe, struct vrdma_request, cqe);
++
++	if (unlikely(wc->status != IB_WC_SUCCESS)) {
++	}
++}
++
++static int vrdma_queue_req(struct vof_request *vofreq)
++{
++	struct vrdma_request *vrdmareq = to_vrdmareq(vofreq);
++	struct vrdma_queue *vrdmaq = to_vrdmaq(vofreq->vofq);
++	struct ib_send_wr wr;
++	struct ib_sge sge;
++	int ret;
++
++	vrdmareq->cqe.done = vrdma_send_done;
++
++	sge.addr = vrdmareq->dma;
++	sge.length = sizeof(struct virtio_of_command) + sizeof(struct virtio_of_vring_desc) * vrdmareq->ndesc;
++	sge.lkey = vrdmaq->pd->local_dma_lkey;
++
++	wr.next = NULL;
++	wr.wr_cqe = &vrdmareq->cqe;
++	wr.sg_list = &sge;
++	wr.num_sge = 1;
++	wr.opcode = IB_WR_SEND;
++	wr.send_flags = IB_SEND_SIGNALED;
++
++	ret = ib_post_send(vrdmaq->cm_id->qp, &wr, NULL);
++	if (unlikely(ret)) {
++		vof_dev_err(vrdmaq->vofq.vofdev, "ib_post_send error: %d\n", ret);
++	}
++
++	return ret;
++}
++
++static void vrdma_qp_event(struct ib_event *event, void *context)
++{
++	pr_debug("QP event %s (%d)\n",
++			ib_event_msg(event->event), event->event);
++
++}
++
++static int vrdma_cm_addr_resolved(struct vrdma_queue *vrdmaq)
++{
++	struct ib_pd *pd = NULL;
++	struct ib_cq *cq = NULL;
++	struct ib_qp_init_attr init_attr;
++	u32 vring_num = vrdmaq->vofq.vring_num;
++	int comp_vector = 0;//TODO
++	int ret;
++
++	pd = ib_alloc_pd(vrdmaq->cm_id->device, 0);
++	if (IS_ERR(pd))
++		return PTR_ERR(pd);
++
++	cq = ib_cq_pool_get(vrdmaq->cm_id->device, vring_num, comp_vector, IB_POLL_SOFTIRQ);
++	if (IS_ERR(cq)) {
++		pr_err("ib_cq_pool_get failed: %d\n", (int)PTR_ERR(cq));
++		ret = PTR_ERR(cq);
++		goto error;
++	}
++
++	memset(&init_attr, 0, sizeof(init_attr));
++	init_attr.event_handler = vrdma_qp_event;
++	init_attr.cap.max_send_wr = vring_num;
++	init_attr.cap.max_recv_wr = vring_num;
++	init_attr.cap.max_recv_sge = 1;
++	init_attr.cap.max_send_sge = 1;
++	init_attr.sq_sig_type = IB_SIGNAL_REQ_WR;
++	init_attr.qp_type = IB_QPT_RC;
++	init_attr.send_cq = cq;
++	init_attr.recv_cq = cq;
++	init_attr.qp_context = vrdmaq;
++	ret = rdma_create_qp(vrdmaq->cm_id, pd, &init_attr);
++	if (ret) {
++		pr_err("rdma_create_qp failed: %d\n", ret);
++		goto error;
++	}
++
++	ret = vrdma_alloc_completion(vrdmaq);
++	if (ret)
++		goto error;
++
++	ret = rdma_resolve_route(vrdmaq->cm_id, VOF_TIMEOUT);
++	if (ret) {
++		pr_err("rdma_resolve_route failed: %d\n", ret);
++		goto error;
++	}
++
++	vrdmaq->pd = pd;
++	vrdmaq->cq = cq;
++
++	return 0;
++
++error:
++	if (vrdmaq->vrdmacomp)
++		vrdma_free_completion(vrdmaq, vring_num);
++
++	if (vrdmaq->cm_id->qp)
++		ib_destroy_qp(vrdmaq->cm_id->qp);
++
++	if (pd)
++		ib_dealloc_pd(pd);
++
++	if (cq)
++		ib_cq_pool_put(cq, vring_num);
++
++	return ret;
++}
++
++static int vrdma_cm_route_resolved(struct vrdma_queue *vrdmaq)
++{
++	struct rdma_conn_param param;
++	int ret;
++
++	memset(&param, 0x00, sizeof(struct rdma_conn_param));
++	param.qp_num = vrdmaq->cm_id->qp->qp_num;
++	param.flow_control = 1;
++	param.responder_resources = vrdmaq->cm_id->device->attrs.max_qp_rd_atom;
++	param.retry_count = 7;
++	param.rnr_retry_count = 7;
++
++	ret = rdma_connect_locked(vrdmaq->cm_id, &param);
++	if (ret) {
++		pr_err("rdma_connect_locked failed: %d\n", ret);
++		return ret;
++	}
++
++	return 0;
++}
++
++static int vrdma_cm_established(struct vrdma_queue *vrdmaq)
++{
++	struct vrdma_completion *vrdmacomp;
++	int i, ret;
++
++	for (i = 0; i < vrdmaq->vofq.vring_num; i++) {
++		vrdmacomp = vrdmaq->vrdmacomp + i;
++		ret = vrdma_post_recv(vrdmaq, vrdmacomp);
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
++static int vrdma_cm_handler(struct rdma_cm_id *cm_id, struct rdma_cm_event *ev)
++{
++	struct vrdma_queue *vrdmaq = cm_id->context;
++	int ret;
++
++	pr_debug("event %s, status %d, cm_id %px\n", rdma_event_msg(ev->event), ev->status, cm_id);
++	switch (ev->event) {
++	case RDMA_CM_EVENT_ADDR_RESOLVED:
++		ret = vrdma_cm_addr_resolved(vrdmaq);
++		break;
++	case RDMA_CM_EVENT_ROUTE_RESOLVED:
++		ret = vrdma_cm_route_resolved(vrdmaq);
++		break;
++	case RDMA_CM_EVENT_ESTABLISHED:
++		ret = vrdma_cm_established(vrdmaq);
++		vrdmaq->state = ret;
++		complete(&vrdmaq->cm_comp);
++		break;
++	default:
++		pr_err("unexpected RDMA CM event (%d)\n", ev->event);
++	}
++#if 0
++	//TODO
++	case RDMA_CM_EVENT_REJECTED:
++		cm_error = nvme_rdma_conn_rejected(queue, ev);
++		break;
++	case RDMA_CM_EVENT_ROUTE_ERROR:
++	case RDMA_CM_EVENT_CONNECT_ERROR:
++	case RDMA_CM_EVENT_UNREACHABLE:
++	case RDMA_CM_EVENT_ADDR_ERROR:
++		dev_dbg(queue->ctrl->ctrl.device,
++				"CM error event %d\n", ev->event);
++		cm_error = -ECONNRESET;
++		break;
++	case RDMA_CM_EVENT_DISCONNECTED:
++	case RDMA_CM_EVENT_ADDR_CHANGE:
++	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
++		dev_dbg(queue->ctrl->ctrl.device,
++				"disconnect received - connection closed\n");
++		nvme_rdma_error_recovery(queue->ctrl);
++		break;
++	case RDMA_CM_EVENT_DEVICE_REMOVAL:
++		/* device removal is handled via the ib_client API */
++		break;
++	default:
++		dev_err(queue->ctrl->ctrl.device,
++				"Unexpected RDMA CM event (%d)\n", ev->event);
++		nvme_rdma_error_recovery(queue->ctrl);
++		break;
++	}
++#endif
++
++	if (ret) {
++		vrdmaq->state = ret;
++		complete(&vrdmaq->cm_comp);
++	}
++
++	return 0;
++}
++
++static struct vof_queue *vrdma_create_queue(struct vof_device *vofdev, u32 vring_num)
++{
++	struct vrdma_device *vrdmadev = to_vrdmadev(vofdev);
++	struct vrdma_queue *vrdmaq;
++	int ret;
++
++	vrdmaq = kzalloc(sizeof(*vrdmaq), GFP_KERNEL);
++	if (!vrdmaq)
++		return ERR_PTR(-ENOMEM);
++
++	vrdmaq->vofq.vofdev = vofdev;
++	vrdmaq->vofq.vring_num = vring_num;
++	init_completion(&vrdmaq->cm_comp);
++	vrdmaq->state = -ETIMEDOUT;
++	vrdmaq->cm_id = rdma_create_id(&init_net, vrdma_cm_handler, vrdmaq, RDMA_PS_TCP, IB_QPT_RC);
++	if (IS_ERR(vrdmaq->cm_id)) {
++		vof_dev_err(vofdev, "rdma_create_id failed: %d\n", (int)PTR_ERR(vrdmaq->cm_id));
++		ret = PTR_ERR(vrdmaq->cm_id);
++		goto free_queue;
++	}
++
++	ret = rdma_resolve_addr(vrdmaq->cm_id, NULL, (struct sockaddr *)&vrdmadev->taddr, VOF_TIMEOUT);
++	if (ret) {
++		vof_dev_err(vofdev, "rdma_resolve_addr failed: %d\n", ret);
++		goto destroy_cm;
++	}
++
++	wait_for_completion_timeout(&vrdmaq->cm_comp, VOF_TIMEOUT);
++	if (vrdmaq->state)
++		goto destroy_cm;	//TODO free all resources of a queue
++
++	return &vrdmaq->vofq;
++
++destroy_cm:
++	rdma_destroy_id(vrdmaq->cm_id);
++
++free_queue:
++	kfree(vrdmaq);
++
++	return ERR_PTR(ret);
++}
++
++static struct vof_device *vrdma_create(struct vof_options *opts)
++{
++	struct vrdma_device *vrdmadev;
++	int ret;
++
++	vrdmadev = kzalloc(sizeof(*vrdmadev), GFP_KERNEL);
++	if (!vrdmadev)
++		return ERR_PTR(-ENOMEM);
++
++	ret = inet_pton_with_scope(&init_net, AF_UNSPEC, opts->taddr, opts->tport, &vrdmadev->taddr);
++	if (ret) {
++		pr_info("invalid target addr & port");
++		goto free_dev;
++	}
++
++	if (opts->iaddr) {
++		ret = inet_pton_with_scope(&init_net, AF_UNSPEC, opts->iaddr, opts->iport, &vrdmadev->iaddr);
++		if (ret) {
++			pr_info("invalid initiator addr & port");
++			goto free_dev;
++		}
++	}
++
++	vrdmadev->vofdev.opts = opts;
++	return &vrdmadev->vofdev;
++
++free_dev:
++	kfree(vrdmadev);
++	return ERR_PTR(ret);
++}
++
++static void vrdma_destroy(struct vof_device *vofdev)
++{
++	struct vrdma_device *vrdmadev = to_vrdmadev(vofdev);
++
++	kfree(vrdmadev);
++}
++
++static struct vof_transport_ops vrdma_transport_ops = {
++	.transport = "rdma",
++	.oftype = virtio_of_connection_rdma,
++	.module = THIS_MODULE,
++	.create = vrdma_create,
++	.destroy = vrdma_destroy,
++	.create_queue = vrdma_create_queue,
++	.alloc_req = vrdma_alloc_req,
++	.free_req = vrdma_free_req,
++	.queue_req = vrdma_queue_req,
++	.map_req = vrdma_map_req,
++};
++
++static int __init vrdma_init(void)
++{
++	vof_register_transport(&vrdma_transport_ops);
++	return 0;
++}
++
++static void __exit vrdma_exit(void)
++{
++	vof_unregister_transport(&vrdma_transport_ops);
++}
++
++module_init(vrdma_init);
++module_exit(vrdma_exit);
++
++MODULE_AUTHOR(VRDMA_MODULE_AUTHOR);
++MODULE_DESCRIPTION(VRDMA_MODULE_DESC);
++MODULE_LICENSE(VRDMA_MODULE_LICENSE);
++MODULE_VERSION(VRDMA_MODULE_VERSION);
+diff --git a/drivers/virtio/virtio_tcp.c b/drivers/virtio/virtio_tcp.c
+new file mode 100644
+index 000000000000..02a61f93ee7a
+--- /dev/null
++++ b/drivers/virtio/virtio_tcp.c
+@@ -0,0 +1,720 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * VIRTIO Over TCP initiator
++ *
++ * Copyright (c) 2023, Bytedance Inc. All rights reserved.
++ *	Author: zhenwei pi <pizhenwei@bytedance.com>
++ *
++ */
++
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/device.h>
++#include <linux/kernel.h>
++#include <linux/parser.h>
++#include <linux/miscdevice.h>
++#include <linux/seq_file.h>
++#include <linux/slab.h>
++#include <linux/uuid.h>
++#include <linux/virtio.h>
++#include <linux/virtio_config.h>
++#include <linux/virtio_ring.h>
++#include <linux/virtio_of.h>
++#include <linux/inet.h>
++#include <net/tcp.h>
++#include <linux/virtio_of.h>
++
++#include "virtio_fabrics.h"
++
++#define VTCP_MODULE_AUTHOR	"zhenwei pi <pizhenwei@bytedance.com>"
++#define VTCP_MODULE_DESC	"VIRTIO Over TCP initiator"
++#define VTCP_MODULE_LICENSE	"GPL v2"
++#define VTCP_MODULE_VERSION	"0.1"
++
++static struct workqueue_struct *vtcp_wq;
++
++enum vtcp_request_stage {
++	vtcp_req_send_cmd,
++	vtcp_req_send_desc,
++	vtcp_req_send_vring,
++	vtcp_req_recv_comp,
++	vtcp_req_recv_desc,
++	vtcp_req_recv_vring,
++	vtcp_req_recv_done,
++};
++
++struct vtcp_request {
++	struct vof_request vofreq;
++	struct list_head entry;
++	struct completion comp;
++	struct virtio_of_vring_desc *vofdescs, *rcv_vofdescs;
++	u8 **addr;
++	u32 cur_off;
++	u16 ndesc;	/* total descriptors */
++	u16 rcv_ndesc;	/* descriptors to receive */
++	u16 cur_desc;	/* descriptor index we are handling currently */
++	u8 stage;
++};
++
++struct vtcp_queue {
++	struct vof_queue vofq;
++
++	struct socket *sock;
++	struct work_struct work;
++	void (*sk_state_change)(struct sock *sk);
++	void (*sk_data_ready)(struct sock *sk);
++	void (*sk_write_space)(struct sock *sk);
++
++	struct mutex send_mutex;	/* to avoid re-entry send work */
++	struct list_head send_list;	/* queued requests, to be sent */
++	spinlock_t send_lock;		/* to protect send_list */
++
++	struct vtcp_request *sendreq, *recvreq;	/* the requests in process */
++	struct virtio_of_completion recvcomp;	/* the response in process */
++	u8 recvbytes;	/* to describe the received length of recvcomp */
++};
++
++struct vtcp_device {
++	struct vof_device vofdev;
++	struct sockaddr_storage taddr;
++	struct sockaddr_storage iaddr;
++};
++
++static inline struct vtcp_request *to_vtcpreq(struct vof_request *vofreq)
++{
++	return container_of(vofreq, struct vtcp_request, vofreq);
++}
++
++static inline struct vtcp_queue *to_vtcpq(struct vof_queue *vofq)
++{
++	return container_of(vofq, struct vtcp_queue, vofq);
++}
++
++static inline struct vtcp_device *to_vtcpdev(struct vof_device *vofdev)
++{
++	return container_of(vofdev, struct vtcp_device, vofdev);
++}
++
++static struct vof_request *vtcp_alloc_req(struct vof_queue *vofq, u16 snd_ndesc, u16 rcv_ndesc)
++{
++	struct vtcp_request *vtcpreq;
++	struct virtio_of_command *vofcmd;
++	int length;
++	u16 ndesc = snd_ndesc + rcv_ndesc;
++
++	/* To reduce kzalloc: combine the request buffer into a single one.
++	 * The memory has a layout:
++	 * | vtcpreq          |
++	 * | vofcmd           |
++	 * | desc * ndesc     |
++	 * | desc * rcv_ndesc |
++	 * | ptr * ndesc      |
++	 */
++	length = sizeof(struct vtcp_request);
++	length += sizeof(struct virtio_of_command);
++	length += sizeof(struct virtio_of_vring_desc) * ndesc;
++	length += sizeof(struct virtio_of_vring_desc) * rcv_ndesc;
++	length += sizeof(u8 *) * ndesc;
++	vtcpreq = kzalloc(length, GFP_KERNEL);
++	if (!vtcpreq)
++		return NULL;
++
++	vtcpreq->stage = vtcp_req_send_cmd;
++	vofcmd = (struct virtio_of_command *)(vtcpreq + 1);
++	vtcpreq->vofreq.vofcmd = vofcmd;
++	if (ndesc) {
++		vtcpreq->ndesc = ndesc;
++		vtcpreq->vofdescs = (struct virtio_of_vring_desc *)(vofcmd + 1);
++
++		vtcpreq->rcv_ndesc = rcv_ndesc;
++		vtcpreq->rcv_vofdescs = vtcpreq->vofdescs + ndesc;
++
++		vtcpreq->addr = (u8 **)(vtcpreq->rcv_vofdescs + rcv_ndesc);
++	}
++
++	return &vtcpreq->vofreq;
++}
++
++/* vtcp_free_req is called from two scenarios:
++ * 1, a request is sent by workqueue(removed from send_list), freed after interrupt
++ * 2, a request is queued in send_list and wait to send, freed when destroying queue
++ */
++static void vtcp_free_req(struct vof_request *vofreq)
++{
++	struct vtcp_request *vtcpreq = to_vtcpreq(vofreq);
++	struct vtcp_queue *vtcpq = to_vtcpq(vofreq->vofq);
++
++	if (unlikely(!list_empty(&vtcpreq->entry))) {
++		spin_lock(&vtcpq->send_lock);
++		list_del(&vtcpreq->entry);
++		spin_unlock(&vtcpq->send_lock);
++	}
++
++	kfree(vtcpreq);
++}
++
++static int vtcp_map_req(struct vof_request *vofreq, u16 idx, struct vring_desc *desc, u16 id, u32 *_length)
++{
++	struct vtcp_request *vtcpreq = to_vtcpreq(vofreq);
++	struct vof_device *vofdev = vofreq->vofq->vofdev;
++	struct virtio_of_vring_desc *vofdesc = vtcpreq->vofdescs + idx;
++	void *addr;
++	u32 length;
++	u16 flags;
++
++	addr = phys_to_virt(virtio64_to_cpu(&vofdev->vdev, desc->addr));
++	vtcpreq->addr[idx] = addr;
++	length = virtio32_to_cpu(&vofdev->vdev, desc->len);
++	flags = virtio16_to_cpu(&vofdev->vdev, desc->flags);
++
++	vofdesc->addr = *_length;
++	vofdesc->length = cpu_to_le32(length);
++	vofdesc->id = cpu_to_le16(id);
++	vofdesc->flags = cpu_to_le16(flags);
++
++	if (flags & VRING_DESC_F_NEXT)
++		*_length += length;
++
++	return 0;
++}
++
++static int vtcp_queue_req(struct vof_request *vofreq)
++{
++	struct vtcp_request *vtcpreq = to_vtcpreq(vofreq);
++	struct vtcp_queue *vtcpq = to_vtcpq(vofreq->vofq);
++
++	spin_lock(&vtcpq->send_lock);
++	list_add_tail(&vtcpreq->entry, &vtcpq->send_list);
++	spin_unlock(&vtcpq->send_lock);
++
++	queue_work(vtcp_wq, &vtcpq->work);
++
++	return 0;
++}
++
++static int vtcp_queue_send_one(struct vtcp_request *vtcpreq, u8 *addr, u32 tosend, unsigned int msg_flags)
++{
++	struct vtcp_queue *vtcpq = to_vtcpq(vtcpreq->vofreq.vofq);
++	struct msghdr msg = { .msg_flags = MSG_DONTWAIT | msg_flags };
++	struct kvec iov = { .iov_base = addr, .iov_len = tosend };
++	int ret;
++
++	if (!tosend)
++		return 0;
++
++	ret = kernel_sendmsg(vtcpq->sock, &msg, &iov, 1, iov.iov_len);
++	if (ret <= 0)
++		return ret;
++
++	vtcpreq->cur_off += ret;
++	if (ret == tosend)
++		vtcpreq->cur_off = 0;
++
++	return ret;
++}
++
++/* Get TCP MSG flags for vring buffer */
++static inline unsigned int vtcp_msg_flags(struct vtcp_request *vtcpreq)
++{
++	struct virtio_of_vring_desc *vofdesc;
++
++	if (vtcpreq->cur_desc == vtcpreq->ndesc - 1)
++		return MSG_EOR;
++
++	/* Tricky! virtio request usually: OUT[OUT] ... [IN] IN */
++	vofdesc = &vtcpreq->vofdescs[vtcpreq->cur_desc + 1];
++	if (le16_to_cpu(vofdesc->flags) & VRING_DESC_F_WRITE)
++		return MSG_EOR;
++
++	return MSG_MORE;
++}
++
++/* Return 0 or positive number on success, negative error code on failure. */
++static int vtcp_queue_send(struct vtcp_queue *vtcpq)
++{
++	struct vtcp_request *vtcpreq;
++	struct virtio_of_vring_desc *vofdesc;
++	u8 *addr;
++	unsigned int msg_flags;
++	int tosend;
++	int ret = 0;
++
++send_one:
++	vtcpreq = vtcpq->sendreq;
++	if (!vtcpreq) {
++		/* try to grab a request from send list */
++		spin_lock(&vtcpq->send_lock);
++		vtcpreq = list_first_entry_or_null(&vtcpq->send_list, struct vtcp_request, entry);
++		if (!vtcpreq) {
++			spin_unlock(&vtcpq->send_lock);
++			return 0;
++		}
++		list_del_init(&vtcpreq->entry);
++		spin_unlock(&vtcpq->send_lock);
++
++		vtcpq->sendreq = vtcpreq; /* mark this request as sending */
++	}
++
++	switch (vtcpreq->stage) {
++	case vtcp_req_send_cmd:
++		tosend = sizeof(*vtcpreq->vofreq.vofcmd);
++		BUG_ON(vtcpreq->cur_off >= tosend);
++		tosend -= vtcpreq->cur_off;
++		addr = (u8 *)vtcpreq->vofreq.vofcmd + vtcpreq->cur_off;
++		msg_flags = vtcpreq->ndesc ? MSG_MORE : MSG_EOR;
++		ret = vtcp_queue_send_one(vtcpreq, addr, tosend, msg_flags);
++		if (ret < tosend)
++			goto out;
++
++		if (!vtcpreq->ndesc) {
++			vtcpreq->stage = vtcp_req_recv_comp;
++			vtcpq->sendreq = NULL;
++			goto send_one;
++		}
++
++		vtcpreq->stage = vtcp_req_send_desc;
++		fallthrough;
++
++	case vtcp_req_send_desc:
++		tosend = sizeof(struct virtio_of_vring_desc) * vtcpreq->ndesc;
++		BUG_ON(vtcpreq->cur_off >= tosend);
++		tosend -= vtcpreq->cur_off;
++		addr = (u8 *)vtcpreq->vofdescs + vtcpreq->cur_off;
++		ret = vtcp_queue_send_one(vtcpreq, addr, tosend, MSG_MORE);
++		if (ret < tosend)
++			goto out;
++
++		vtcpreq->stage = vtcp_req_send_vring;
++		fallthrough;
++
++	case vtcp_req_send_vring:
++		while (vtcpreq->cur_desc < vtcpreq->ndesc) {
++			vofdesc = &vtcpreq->vofdescs[vtcpreq->cur_desc];
++			if (le16_to_cpu(vofdesc->flags) & VRING_DESC_F_WRITE) {
++				vtcpreq->cur_desc++;
++				continue;
++			}
++
++			tosend = le32_to_cpu(vofdesc->length);
++			BUG_ON(vtcpreq->cur_off >= tosend);
++			tosend -= vtcpreq->cur_off;
++			addr = (u8 *)vtcpreq->addr[vtcpreq->cur_desc] + vtcpreq->cur_off;
++			msg_flags = vtcp_msg_flags(vtcpreq);
++			ret = vtcp_queue_send_one(vtcpreq, addr, tosend, msg_flags);
++			if (ret < tosend)
++				goto out;
++
++			vtcpreq->cur_desc++;
++		}
++
++		vtcpreq->cur_desc = 0;
++		vtcpreq->stage = vtcp_req_recv_comp;
++		vtcpq->sendreq = NULL;
++		goto send_one;
++
++	default:
++		BUG();
++	}
++
++out:
++	if (ret == -EAGAIN)
++		ret = 0;
++
++	return ret;
++}
++
++static int vtcp_skb_copy(struct sk_buff *skb, struct vtcp_request *vtcpreq, u8 *addr, u32 torecv, u32 remained, int offset)
++{
++	u32 copied;
++	int ret;
++
++	copied = min_t(u32, torecv, remained);
++	if (!copied)
++		return 0;
++
++	ret = skb_copy_bits(skb, offset, addr, copied);
++	if (ret)
++		return ret;
++
++	vtcpreq->cur_off += copied;
++	if (copied == torecv)
++		vtcpreq->cur_off = 0;
++
++	return copied;
++}
++
++static int vtcp_skb_recv_one(read_descriptor_t *desc, struct sk_buff *skb, unsigned int offset, size_t len)
++{
++	struct vtcp_queue *vtcpq = desc->arg.data;
++	struct vof_queue *vofq = &vtcpq->vofq;
++	struct virtio_of_completion *comp;
++	struct vof_request *vofreq;
++	struct vtcp_request *vtcpreq;
++	struct virtio_of_vring_desc *snd_vofdesc, *rcv_vofdesc;
++	u8 *addr;
++	int torecv;
++	int ret;
++	u16 command_id, status, ndesc, id;
++
++	vtcpreq = vtcpq->recvreq;
++	if (!vtcpreq) {
++		comp = &vtcpq->recvcomp;
++		torecv = sizeof(struct virtio_of_completion);
++		BUG_ON(vtcpq->recvbytes >= torecv);
++		torecv -= vtcpq->recvbytes;
++		torecv = min_t(u32, torecv, len);
++		addr = (u8 *)comp + vtcpq->recvbytes;
++		ret = skb_copy_bits(skb, offset, addr, torecv);
++		if (ret)
++			return ret;
++
++		vtcpq->recvbytes += torecv;
++		if (vtcpq->recvbytes < sizeof(struct virtio_of_completion))
++			return torecv;
++
++		/* now we have a full virtio_of_completion */
++		vtcpq->recvbytes = 0;
++		command_id = le16_to_cpu(comp->command_id);
++		status = le16_to_cpu(comp->status);
++		vofreq = vof_request_load(&vtcpq->vofq, command_id);
++		if (!vofreq) {
++			dev_err(&vtcpq->vofq.vofdev->vdev.dev, "bad command_id %u", command_id);
++			return -EPROTO;	//TODO handle this, reset
++		}
++
++		vtcpreq = to_vtcpreq(vofreq);
++		if (le16_to_cpu(vtcpreq->vofreq.vofcmd->common.command_id) != command_id) {
++			dev_err(&vtcpq->vofq.vofdev->vdev.dev, "unexpected command_id");
++			return -EPROTO;	//TODO handle this, reset
++		}
++
++		BUG_ON(vtcpreq->stage != vtcp_req_recv_comp);
++		vtcpq->recvreq = vtcpreq;
++		memcpy(&vtcpreq->vofreq.vofcomp, comp, sizeof(*comp));
++		ndesc = le16_to_cpu(vtcpreq->vofreq.vofcomp.ndesc);
++		if (ndesc != vtcpreq->rcv_ndesc) {
++			dev_err(&vtcpq->vofq.vofdev->vdev.dev, "unexpected ndesc");
++			return -EPROTO;
++		}
++
++memset(comp, 0xff, sizeof(*comp));//XXX
++		if (!ndesc) {
++			vtcpreq->stage = vtcp_req_recv_done;
++			ret = torecv;
++			goto recv_done;
++		}
++
++		vtcpreq->stage = vtcp_req_recv_desc;
++		return torecv;
++	}
++
++	switch (vtcpreq->stage) {
++	case vtcp_req_recv_desc:
++		torecv = sizeof(struct virtio_of_vring_desc) * vtcpreq->rcv_ndesc;
++		BUG_ON(vtcpreq->cur_off >= torecv);
++		torecv -= vtcpreq->cur_off;
++		addr = (u8 *)vtcpreq->rcv_vofdescs + vtcpreq->cur_off;
++		ret = vtcp_skb_copy(skb, vtcpreq, addr, torecv, len, offset);
++		if (ret == torecv)
++			vtcpreq->stage = vtcp_req_recv_vring;
++
++		return ret;
++
++	case vtcp_req_recv_vring:
++		BUG_ON(vtcpreq->cur_desc >= vtcpreq->rcv_ndesc);
++		rcv_vofdesc = &vtcpreq->rcv_vofdescs[vtcpreq->cur_desc];
++		id = le16_to_cpu(rcv_vofdesc->id);
++		for (ndesc = 0; ndesc < vtcpreq->ndesc; ndesc++) {
++			snd_vofdesc = &vtcpreq->vofdescs[ndesc];
++			if (le16_to_cpu(snd_vofdesc->id) == id)
++				break;
++		}
++
++		if (ndesc == vtcpreq->ndesc)
++			return -EPROTO;
++
++		torecv = le32_to_cpu(rcv_vofdesc->length);
++		if (torecv > le32_to_cpu(snd_vofdesc->length))
++			return -EPROTO;
++		BUG_ON(vtcpreq->cur_off >= torecv);
++		torecv -= vtcpreq->cur_off;
++		addr = vtcpreq->addr[ndesc] + vtcpreq->cur_off;
++		ret = vtcp_skb_copy(skb, vtcpreq, addr, torecv, len, offset);
++		if (ret < torecv)
++			return ret;
++
++		if (++vtcpreq->cur_desc < vtcpreq->rcv_ndesc)
++			return ret;
++
++		vtcpreq->stage = vtcp_req_recv_done;
++		goto recv_done;
++
++	default:
++		BUG();
++	}
++
++recv_done:
++	vofq->interrupt(vofq, &vtcpq->recvreq->vofreq.vofcomp);
++	vtcpq->recvreq = NULL;
++
++	return ret;
++}
++
++static int vtcp_skb_recv(read_descriptor_t *desc, struct sk_buff *skb, unsigned int offset, size_t len)
++{
++	size_t bytes = len;
++	int ret;
++
++	while (bytes) {
++		ret = vtcp_skb_recv_one(desc, skb, offset, bytes);
++		if (ret < 0)
++			return ret;
++
++		offset += ret;
++		bytes -= ret;
++	}
++
++	return len;
++}
++
++static int vtcp_queue_recv(struct vtcp_queue *vtcpq)
++{
++	struct socket *sock = vtcpq->sock;
++	struct sock *sk = sock->sk;
++	read_descriptor_t rd_desc;
++	int received;
++
++	rd_desc.arg.data = vtcpq;
++	rd_desc.count = 1;
++	lock_sock(sk);
++	received = sock->ops->read_sock(sk, &rd_desc, vtcp_skb_recv);
++	release_sock(sk);
++
++	return received;
++}
++
++static void vtcp_queue_work(struct work_struct *work)
++{
++	struct vtcp_queue *vtcpq = container_of(work, struct vtcp_queue, work);
++
++	if (mutex_trylock(&vtcpq->send_mutex)) {
++		vtcp_queue_send(vtcpq);//TODO handle error
++		mutex_unlock(&vtcpq->send_mutex);
++	}
++
++	vtcp_queue_recv(vtcpq);
++}
++
++static void vtcp_sk_state_change(struct sock *sk)
++{
++	struct vtcp_queue *vtcpq;
++
++	read_lock_bh(&sk->sk_callback_lock);
++	vtcpq = sk->sk_user_data;
++	if (!vtcpq)
++		goto unlock;
++
++	switch (sk->sk_state) {
++	case TCP_CLOSE:
++	case TCP_CLOSE_WAIT:
++	case TCP_LAST_ACK:
++	case TCP_FIN_WAIT1:
++	case TCP_FIN_WAIT2:
++		vof_dev_warn(vtcpq->vofq.vofdev, "socket state changed\n");
++		break;
++	default:
++		vof_dev_warn(vtcpq->vofq.vofdev, "unexpected socket state\n");
++	}
++
++	vtcpq->sk_state_change(sk);
++unlock:
++	read_unlock_bh(&sk->sk_callback_lock);
++}
++
++static void vtcp_sk_data_ready(struct sock *sk)
++{
++	struct vtcp_queue *vtcpq;
++
++	read_lock_bh(&sk->sk_callback_lock);
++	vtcpq = sk->sk_user_data;
++	if (vtcpq) {
++		//queue_work_on(smp_processor_id(), vtcp_wq, &queue->work);
++		queue_work(vtcp_wq, &vtcpq->work);
++	}
++	read_unlock_bh(&sk->sk_callback_lock);
++}
++
++static void vtcp_sk_write_space(struct sock *sk)
++{
++	struct vtcp_queue *vtcpq;
++
++	read_lock_bh(&sk->sk_callback_lock);
++	vtcpq = sk->sk_user_data;
++	if (vtcpq) {
++		//queue_work_on(smp_processor_id(), vtcp_wq, &vtcpq->work);
++		queue_work(vtcp_wq, &vtcpq->work);
++	}
++	read_unlock_bh(&sk->sk_callback_lock);
++}
++
++static void vtcp_sk_overwrite_handler(struct vtcp_queue *vtcpq)
++{
++	write_lock_bh(&vtcpq->sock->sk->sk_callback_lock);
++	vtcpq->sock->sk->sk_user_data = vtcpq;
++	vtcpq->sk_state_change = vtcpq->sock->sk->sk_state_change;
++	vtcpq->sk_data_ready = vtcpq->sock->sk->sk_data_ready;
++	vtcpq->sk_write_space = vtcpq->sock->sk->sk_write_space;
++	vtcpq->sock->sk->sk_state_change = vtcp_sk_state_change;
++	vtcpq->sock->sk->sk_data_ready = vtcp_sk_data_ready;
++	vtcpq->sock->sk->sk_write_space = vtcp_sk_write_space;
++	write_unlock_bh(&vtcpq->sock->sk->sk_callback_lock);
++}
++
++static void vtcp_sk_restore_handler(struct vtcp_queue *vtcpq)
++{
++	write_lock_bh(&vtcpq->sock->sk->sk_callback_lock);
++	vtcpq->sock->sk->sk_user_data = NULL;
++	vtcpq->sock->sk->sk_state_change = vtcpq->sk_state_change;
++	vtcpq->sock->sk->sk_data_ready = vtcpq->sk_data_ready;
++	vtcpq->sock->sk->sk_write_space = vtcpq->sk_write_space;
++	write_unlock_bh(&vtcpq->sock->sk->sk_callback_lock);
++}
++
++static void vtcp_destroy_queue(struct vof_queue *vofq)
++{
++	struct vtcp_queue *vtcpq = to_vtcpq(vofq);
++	struct vtcp_request *vtcpreq, *n;
++
++	vtcp_sk_restore_handler(vtcpq);
++	kernel_sock_shutdown(vtcpq->sock, SHUT_RDWR);
++	sock_release(vtcpq->sock);
++	cancel_work_sync(&vtcpq->work);
++
++	spin_lock(&vtcpq->send_lock);
++	list_for_each_entry_safe(vtcpreq, n, &vtcpq->send_list, entry) {
++		list_del(&vtcpreq->entry);
++		vtcp_free_req(&vtcpreq->vofreq);
++	}
++	spin_unlock(&vtcpq->send_lock);
++
++	kfree(vtcpq);
++}
++
++static struct vof_queue *vtcp_create_queue(struct vof_device *vofdev, u32 vring_num)
++{
++	struct vtcp_device *vtcpdev = to_vtcpdev(vofdev);
++	struct vtcp_queue *vtcpq;
++	int ret;
++
++	vtcpq = kzalloc(sizeof(*vtcpq), GFP_KERNEL);
++	if (!vtcpq)
++		return ERR_PTR(-ENOMEM);
++
++	ret = sock_create(vtcpdev->taddr.ss_family, SOCK_STREAM, IPPROTO_TCP, &vtcpq->sock);
++	if (ret)
++		goto free_queue;
++
++	vtcpq->vofq.vofdev = vofdev;
++	vtcpq->vofq.vring_num = vring_num;
++	vtcpq->sock->sk->sk_rcvtimeo = VOF_TIMEOUT;
++	vtcpq->sock->sk->sk_use_task_frag = false;
++	vtcpq->sock->sk->sk_allocation = GFP_ATOMIC;
++	sk_set_memalloc(vtcpq->sock->sk);
++	tcp_sock_set_syncnt(vtcpq->sock->sk, 1);
++	tcp_sock_set_nodelay(vtcpq->sock->sk);
++	sock_no_linger(vtcpq->sock->sk);
++
++	ret = kernel_connect(vtcpq->sock, (struct sockaddr *)&vtcpdev->taddr, sizeof(vtcpdev->taddr), 0);
++	if (ret)
++		goto release_sock;
++
++	vtcp_sk_overwrite_handler(vtcpq);
++	INIT_LIST_HEAD(&vtcpq->send_list);
++	spin_lock_init(&vtcpq->send_lock);
++	INIT_WORK(&vtcpq->work, vtcp_queue_work);
++	mutex_init(&vtcpq->send_mutex);
++
++	return &vtcpq->vofq;
++
++release_sock:
++	sock_release(vtcpq->sock);
++
++free_queue:
++	kfree(vtcpq);
++
++	return ERR_PTR(ret);
++}
++
++static struct vof_device *vtcp_create(struct vof_options *opts)
++{
++	struct vtcp_device *vtcpdev;
++	int ret;
++
++	vtcpdev = kzalloc(sizeof(*vtcpdev), GFP_KERNEL);
++	if (!vtcpdev)
++		return ERR_PTR(-ENOMEM);
++
++	ret = inet_pton_with_scope(&init_net, AF_UNSPEC, opts->taddr, opts->tport, &vtcpdev->taddr);
++	if (ret)
++		goto free_dev;
++
++	if (opts->iaddr) {
++		ret = inet_pton_with_scope(&init_net, AF_UNSPEC, opts->iaddr, opts->iport, &vtcpdev->iaddr);
++		if (ret)
++			goto free_dev;
++	}
++
++	vtcpdev->vofdev.opts = opts;
++	return &vtcpdev->vofdev;
++
++free_dev:
++	kfree(vtcpdev);
++	return ERR_PTR(ret);
++}
++
++static void vtcp_destroy(struct vof_device *vofdev)
++{
++	struct vtcp_device *vtcpdev = to_vtcpdev(vofdev);
++
++	kfree(vtcpdev);
++}
++
++static struct vof_transport_ops vtcp_transport_ops = {
++	.transport = "tcp",
++	.oftype = virtio_of_connection_tcp,
++	.module = THIS_MODULE,
++	.create = vtcp_create,
++	.destroy = vtcp_destroy,
++	.create_queue = vtcp_create_queue,
++	.destroy_queue = vtcp_destroy_queue,
++	.alloc_req = vtcp_alloc_req,
++	.free_req = vtcp_free_req,
++	.queue_req = vtcp_queue_req,
++	.map_req = vtcp_map_req,
++};
++
++static int __init vtcp_init(void)
++{
++	vtcp_wq = alloc_workqueue("vtcp_wq", WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
++	if (!vtcp_wq)
++		return -ENOMEM;
++
++	return vof_register_transport(&vtcp_transport_ops);
++}
++
++static void __exit vtcp_exit(void)
++{
++	vof_unregister_transport(&vtcp_transport_ops);
++
++	destroy_workqueue(vtcp_wq);
++}
++
++module_init(vtcp_init);
++module_exit(vtcp_exit);
++
++MODULE_AUTHOR(VTCP_MODULE_AUTHOR);
++MODULE_DESCRIPTION(VTCP_MODULE_DESC);
++MODULE_LICENSE(VTCP_MODULE_LICENSE);
++MODULE_VERSION(VTCP_MODULE_VERSION);
+diff --git a/include/uapi/linux/virtio_of.h b/include/uapi/linux/virtio_of.h
+new file mode 100644
+index 000000000000..2ff7095d6cd2
+--- /dev/null
++++ b/include/uapi/linux/virtio_of.h
+@@ -0,0 +1,306 @@
++/* SPDX-License-Identifier: BSD-3-Clause */
++/* This header is BSD licensed so anyone can use the definitions to implement
++ * compatible drivers/servers. */
++#ifndef _LINUX_VIRTIO_OF_H
++#define _LINUX_VIRTIO_OF_H
++
++#include <linux/virtio_types.h>
++
++enum virtio_of_connection_type {
++	virtio_of_connection_tcp,
++	virtio_of_connection_rdma
++};
++
++enum virtio_of_opcode {
++	/* Connect */
++	virtio_of_op_connect = 0,
++	/* Disconnect */
++	virtio_of_op_discconnect,
++	/* Keepalive */
++	virtio_of_op_keepalive,
++	/* Get features of virtio-over-fabrics */
++	virtio_of_op_get_feature,
++	/* Set features of virtio-over-fabrics */
++	virtio_of_op_set_feature,
++	/* TODO discovery */
++	/* TODO auth */
++
++	/* Get vendor ID - 32b */
++	virtio_of_op_get_vendor_id = 4096,
++	/* Get device ID - 32b */
++	virtio_of_op_get_device_id,
++	/* Get configuration generation - 32b */
++	virtio_of_op_get_generation,
++	/* Get status - 32b */
++	virtio_of_op_get_status,
++	/* Set status */
++	virtio_of_op_set_status,
++	/* Get bitmask of the feature supported by the device - 64b */
++	virtio_of_op_get_device_feature,
++	/* Set bitmask of the feature supported by the host */
++	virtio_of_op_set_driver_feature,
++	/* Get the number of queues - 16b */
++	virtio_of_op_get_num_queues,
++	/* Get size of a queue - 16b */
++	virtio_of_op_get_queue_size,
++	/* Set size of a queue */
++	virtio_of_op_set_queue_size,
++	/* Get the config of per-device - 8b/16b/32b/64b */
++	virtio_of_op_get_config,
++	/* Set the config of per-device */
++	virtio_of_op_set_config,
++	/* Get the config of per-device until changed - 8b */
++	virtio_of_op_get_config_changed,
++
++	/* Payload of virtio ring */
++	virtio_of_op_vring = 8192,
++};
++
++enum virtio_of_feature {
++	/* max segs in a single vring request. for opcode virtio_of_op_get_feature */
++	virtio_of_feature_max_segs,
++};
++
++union virtio_of_value {
++	__u8 u8;
++	__le16 u16;
++	__le32 u32;
++	__le64 u64;
++};
++
++struct virtio_of_connect {
++	__u8 ivqn[256];
++	__u8 tvqn[256];
++	__u8 rsvd[512];
++};
++
++struct virtio_of_command_connect {
++	__le16 opcode;
++	__le16 command_id;
++	__le16 target_id;
++	__le16 queue_id;
++	__le16 ndesc;
++	__u8 oftype; /* enum virtio_of_connection_type */
++	__u8 rsvd[5];
++};
++
++struct virtio_of_command_common {
++	__le16 opcode;
++	__le16 command_id;
++	__u8 rsvd4;
++	__u8 rsvd5;
++	__u8 rsvd6;
++	__u8 rsvd7;
++	union virtio_of_value value;	/* ignore this field on GET */
++};
++
++struct virtio_of_command_feature {
++	__le16 opcode;
++	__le16 command_id;
++	__le32 feature_select;
++	__le64 value;	/* ignore this field on GET */
++};
++
++struct virtio_of_command_queue {
++	__le16 opcode;
++	__le16 command_id;
++	__le16 queue_id;
++	__u8 rsvd6;
++	__u8 rsvd7;
++	__le64 value;   /* ignore this field on GET */
++};
++
++struct virtio_of_command_config {
++	__le16 opcode;
++	__le16 command_id;
++	__le16 offset;
++	__u8 bytes;
++	__u8 rsvd7;
++	union virtio_of_value value;	/* ignore this field on GET */
++};
++
++struct virtio_of_command_status {
++	__le16 opcode;
++	__le16 command_id;
++	__le32 status;	/* ignore this field on GET */
++	__u8 rsvd[8];
++};
++
++struct virtio_of_vring_desc {
++	__le64 addr;
++	__le32 length;
++	__le16 id;
++	__le16 flags;
++	union {
++		__le32 key;
++	};
++};
++
++struct virtio_of_command_vring {
++	__le16 opcode;
++	__le16 command_id;
++	__le32 length;
++	__le16 ndesc;
++	__u8 rsvd[6];
++};
++
++struct virtio_of_command {
++	union {
++		struct virtio_of_command_common common;
++		struct virtio_of_command_connect connect;
++		struct virtio_of_command_feature feature;
++		struct virtio_of_command_queue queue;
++		struct virtio_of_command_config config;
++		struct virtio_of_command_status status;
++		struct virtio_of_command_vring vring;
++	};
++};
++
++struct virtio_of_completion {
++	__le16 status;
++	__le16 command_id;
++	__le16 ndesc;
++	__u8 rsvd6;
++	__u8 rsvd7;
++	union virtio_of_value value;
++};
++
++enum virtio_of_status {
++	VIRTIO_OF_SUCCESS = 0,
++	VIRTIO_OF_EPERM = 1,
++	VIRTIO_OF_ENOENT = 2,
++	VIRTIO_OF_ESRCH = 3,
++	VIRTIO_OF_EINTR = 4,
++	VIRTIO_OF_EIO = 5,
++	VIRTIO_OF_ENXIO = 6,
++	VIRTIO_OF_E2BIG = 7,
++	VIRTIO_OF_ENOEXEC = 8,
++	VIRTIO_OF_EBADF = 9,
++	VIRTIO_OF_ECHILD = 10,
++	VIRTIO_OF_EAGAIN = 11,
++	VIRTIO_OF_ENOMEM = 12,
++	VIRTIO_OF_EACCES = 13,
++	VIRTIO_OF_EFAULT = 14,
++	VIRTIO_OF_ENOTBLK = 15,
++	VIRTIO_OF_EBUSY = 16,
++	VIRTIO_OF_EEXIST = 17,
++	VIRTIO_OF_EXDEV = 18,
++	VIRTIO_OF_ENODEV = 19,
++	VIRTIO_OF_ENOTDIR = 20,
++	VIRTIO_OF_EISDIR = 21,
++	VIRTIO_OF_EINVAL = 22,
++	VIRTIO_OF_ENFILE = 23,
++	VIRTIO_OF_EMFILE = 24,
++	VIRTIO_OF_ENOTTY = 25,
++	VIRTIO_OF_ETXTBSY = 26,
++	VIRTIO_OF_EFBIG = 27,
++	VIRTIO_OF_ENOSPC = 28,
++	VIRTIO_OF_ESPIPE = 29,
++	VIRTIO_OF_EROFS = 30,
++	VIRTIO_OF_EMLINK = 31,
++	VIRTIO_OF_EPIPE = 32,
++	VIRTIO_OF_EDOM = 33,
++	VIRTIO_OF_ERANGE = 34,
++	VIRTIO_OF_EDEADLK = 35,
++	VIRTIO_OF_ENAMETOOLONG = 36,
++	VIRTIO_OF_ENOLCK = 37,
++	VIRTIO_OF_ENOSYS = 38,
++	VIRTIO_OF_ENOTEMPTY = 39,
++	VIRTIO_OF_ELOOP = 40,
++	VIRTIO_OF_EWOULDBLOCK = 41,
++	VIRTIO_OF_ENOMSG = 42,
++	VIRTIO_OF_EIDRM = 43,
++	VIRTIO_OF_ECHRNG = 44,
++	VIRTIO_OF_EL2NSYNC = 45,
++	VIRTIO_OF_EL3HLT = 46,
++	VIRTIO_OF_EL3RST = 47,
++	VIRTIO_OF_ELNRNG = 48,
++	VIRTIO_OF_EUNATCH = 49,
++	VIRTIO_OF_ENOCSI = 50,
++	VIRTIO_OF_EL2HLT = 51,
++	VIRTIO_OF_EBADE = 52,
++	VIRTIO_OF_EBADR = 53,
++	VIRTIO_OF_EXFULL = 54,
++	VIRTIO_OF_ENOANO = 55,
++	VIRTIO_OF_EBADRQC = 56,
++	VIRTIO_OF_EBADSLT = 57,
++	VIRTIO_OF_EDEADLOCK = 58,
++	VIRTIO_OF_EBFONT = 59,
++	VIRTIO_OF_ENOSTR = 60,
++	VIRTIO_OF_ENODATA = 61,
++	VIRTIO_OF_ETIME = 62,
++	VIRTIO_OF_ENOSR = 63,
++	VIRTIO_OF_ENONET = 64,
++	VIRTIO_OF_ENOPKG = 65,
++	VIRTIO_OF_EREMOTE = 66,
++	VIRTIO_OF_ENOLINK = 67,
++	VIRTIO_OF_EADV = 68,
++	VIRTIO_OF_ESRMNT = 69,
++	VIRTIO_OF_ECOMM = 70,
++	VIRTIO_OF_EPROTO = 71,
++	VIRTIO_OF_EMULTIHOP = 72,
++	VIRTIO_OF_EDOTDOT = 73,
++	VIRTIO_OF_EBADMSG = 74,
++	VIRTIO_OF_EOVERFLOW = 75,
++	VIRTIO_OF_ENOTUNIQ = 76,
++	VIRTIO_OF_EBADFD = 77,
++	VIRTIO_OF_EREMCHG = 78,
++	VIRTIO_OF_ELIBACC = 79,
++	VIRTIO_OF_ELIBBAD = 80,
++	VIRTIO_OF_ELIBSCN = 81,
++	VIRTIO_OF_ELIBMAX = 82,
++	VIRTIO_OF_ELIBEXEC = 83,
++	VIRTIO_OF_EILSEQ = 84,
++	VIRTIO_OF_ERESTART = 85,
++	VIRTIO_OF_ESTRPIPE = 86,
++	VIRTIO_OF_EUSERS = 87,
++	VIRTIO_OF_ENOTSOCK = 88,
++	VIRTIO_OF_EDESTADDRREQ = 89,
++	VIRTIO_OF_EMSGSIZE = 90,
++	VIRTIO_OF_EPROTOTYPE = 91,
++	VIRTIO_OF_ENOPROTOOPT = 92,
++	VIRTIO_OF_EPROTONOSUPPORT = 93,
++	VIRTIO_OF_ESOCKTNOSUPPORT = 94,
++	VIRTIO_OF_EOPNOTSUPP = 95,
++	VIRTIO_OF_EPFNOSUPPORT = 96,
++	VIRTIO_OF_EAFNOSUPPORT = 97,
++	VIRTIO_OF_EADDRINUSE = 98,
++	VIRTIO_OF_EADDRNOTAVAIL = 99,
++	VIRTIO_OF_ENETDOWN = 100,
++	VIRTIO_OF_ENETUNREACH = 101,
++	VIRTIO_OF_ENETRESET = 102,
++	VIRTIO_OF_ECONNABORTED = 103,
++	VIRTIO_OF_ECONNRESET = 104,
++	VIRTIO_OF_ENOBUFS = 105,
++	VIRTIO_OF_EISCONN = 106,
++	VIRTIO_OF_ENOTCONN = 107,
++	VIRTIO_OF_ESHUTDOWN = 108,
++	VIRTIO_OF_ETOOMANYREFS = 109,
++	VIRTIO_OF_ETIMEDOUT = 110,
++	VIRTIO_OF_ECONNREFUSED = 111,
++	VIRTIO_OF_EHOSTDOWN = 112,
++	VIRTIO_OF_EHOSTUNREACH = 113,
++	VIRTIO_OF_EALREADY = 114,
++	VIRTIO_OF_EINPROGRESS = 115,
++	VIRTIO_OF_ESTALE = 116,
++	VIRTIO_OF_EUCLEAN = 117,
++	VIRTIO_OF_ENOTNAM = 118,
++	VIRTIO_OF_ENAVAIL = 119,
++	VIRTIO_OF_EISNAM = 120,
++	VIRTIO_OF_EREMOTEIO = 121,
++	VIRTIO_OF_EDQUOT = 122,
++	VIRTIO_OF_ENOMEDIUM = 123,
++	VIRTIO_OF_EMEDIUMTYPE = 124,
++	VIRTIO_OF_ECANCELED = 125,
++	VIRTIO_OF_ENOKEY = 126,
++	VIRTIO_OF_EKEYEXPIRED = 127,
++	VIRTIO_OF_EKEYREVOKED = 128,
++	VIRTIO_OF_EKEYREJECTED = 129,
++	VIRTIO_OF_EOWNERDEAD = 130,
++	VIRTIO_OF_ENOTRECOVERABLE = 131,
++	VIRTIO_OF_ERFKILL = 132,
++	VIRTIO_OF_EHWPOISON = 133,
++	VIRTIO_OF_EQUIRK = 4096
++};
++
++#endif
+-- 
+2.25.1
+
