@@ -19,6 +19,12 @@ stdenv.mkDerivation rec {
     libgcrypt
   ];
 
+  installPhase = ''
+    set -x
+    mkdir -p $out/bin
+    cp ./vtgt ./initiator/vinitiator $out/bin
+  '';
+
   meta = with lib; {
     description = "virtio-oF target";
     homepage = "https://www.opensynergy.com/";
