@@ -90,24 +90,10 @@
     devShells.${system} = rec {
       virtio-target = with pkgs;
         mkShell {
-          packages = [vscode linuxPackages.virtio-lo.dev pkgs.nixgl.nixGLMesa];
-          inputsFrom = [pkgs.libvirtiolo-debug] ++ linuxPackages.kernel.moduleBuildDependencies;
+          packages = [vscode];
+          inputsFrom = [pkgs.virtio-target];
           shellHook = ''
-            export VIRTIO_LOOPBACK_DRIVER_KERNEL="${linuxPackages.kernel.dev}/lib/modules/${linuxPackages.kernel.modDirVersion}/build"
-            echo "VIRTIO_LOOPBACK_DRIVER_KERNEL=''$VIRTIO_LOOPBACK_DRIVER_KERNEL"
-            echo
-            echo "gtk: ${pkgs.gtk3.dev}"
-            echo "nixGL: ${pkgs.nixgl.nixGLMesa}"
-            echo
-            echo "\"includePath\": ["
-            echo "  \"''${workspaceFolder}/**\"",
-            echo "  \"${linuxPackages.virtio-lo.dev}/include\","
-            echo "  \"${linuxPackages.kernel.dev}/lib/modules/${linuxPackages.kernel.modDirVersion}/build/source/include\","
-            echo "  \"${linuxPackages.kernel.dev}/lib/modules/${linuxPackages.kernel.modDirVersion}/source/arch/x86/include\","
-            echo "  \"${linuxPackages.kernel.dev}/lib/modules/${linuxPackages.kernel.modDirVersion}/build/include\","
-            echo "  \"${linuxPackages.kernel.dev}/lib/modules/${linuxPackages.kernel.modDirVersion}/build/arch/x86/include/generaged\""
-            echo "],"
-            echo '"defines": [ "__KERNEL__", "KBUILD_MODNAME=\"virtio-lo\"", "MODULE" ],'
+            echo "Hello world"
           '';
         };
       default = virtio-target;

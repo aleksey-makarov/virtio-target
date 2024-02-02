@@ -58,29 +58,6 @@
         "type": "github"
       }
     },
-    "nixGL": {
-      "inputs": {
-        "flake-utils": [
-          "flake-utils"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1685908677,
-        "narHash": "sha256-E4zUPEUFyVWjVm45zICaHRpfGepfkE9Z2OECV9HXfA4=",
-        "owner": "guibou",
-        "repo": "nixGL",
-        "rev": "489d6b095ab9d289fe11af0219a9ff00fe87c7c5",
-        "type": "github"
-      },
-      "original": {
-        "owner": "guibou",
-        "repo": "nixGL",
-        "type": "github"
-      }
-    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1700538105,
@@ -101,10 +78,7 @@
       "inputs": {
         "flake-utils": "flake-utils",
         "nix-vscode-extensions": "nix-vscode-extensions",
-        "nixGL": "nixGL",
-        "nixpkgs": "nixpkgs",
-        "uhmitest": "uhmitest",
-        "virglrenderer-debug-flake": "virglrenderer-debug-flake"
+        "nixpkgs": "nixpkgs"
       }
     },
     "systems": {
@@ -120,58 +94,6 @@
         "owner": "nix-systems",
         "repo": "default",
         "type": "github"
-      }
-    },
-    "uhmitest": {
-      "inputs": {
-        "flake-utils": [
-          "flake-utils"
-        ],
-        "nix-vscode-extensions": [
-          "nix-vscode-extensions"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1693402911,
-        "narHash": "sha256-/jIlG4LJxoSmngce/pRkgkaK6ZW2E4uNaexvrnDfXfQ=",
-        "owner": "aleksey-makarov",
-        "repo": "uhmitest",
-        "rev": "e7672e91c3f345cba696a7b8cf6131c8860e474c",
-        "type": "github"
-      },
-      "original": {
-        "owner": "aleksey-makarov",
-        "repo": "uhmitest",
-        "type": "github"
-      }
-    },
-    "virglrenderer-debug-flake": {
-      "inputs": {
-        "flake-utils": [
-          "flake-utils"
-        ],
-        "nixGL": [
-          "nixGL"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1705312737,
-        "narHash": "sha256-gqK0j692KPbBlflTszskuJM0qUOV9TcxZeDiD+w/4b8=",
-        "ref": "refs/heads/work",
-        "rev": "33a139554e4b8e6117dd73391c846f0bfc59dbee",
-        "revCount": 3539,
-        "type": "git",
-        "url": "file:/home/amakarov/work/virglrenderer"
-      },
-      "original": {
-        "type": "git",
-        "url": "file:/home/amakarov/work/virglrenderer"
       }
     }
   },

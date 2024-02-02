@@ -1,19 +1,11 @@
 {
   stdenv,
   lib,
-  linuxHeaders,
-  linuxPackages,
-  cmake,
-  pkg-config,
-  gtk3,
-  epoxy,
-  glm,
-  virglrenderer,
-  mesa,
-  libdrm,
+  libgcrypt,
+  # linuxHeaders,
 }:
 stdenv.mkDerivation rec {
-  pname = "libvirtiolo";
+  pname = "virtio-target";
   version = "0.1";
 
   src = ./.;
@@ -23,20 +15,12 @@ stdenv.mkDerivation rec {
   # buildInputs = [];
 
   nativeBuildInputs = [
-    cmake
-    pkg-config
-    linuxHeaders
-    linuxPackages.virtio-lo.dev
-    gtk3
-    epoxy
-    glm
-    virglrenderer
-    mesa
-    libdrm
+    # linuxHeaders
+    libgcrypt
   ];
 
   meta = with lib; {
-    description = "VIRTIO loopback library";
+    description = "virtio-oF target";
     homepage = "https://www.opensynergy.com/";
     license = licenses.mit;
     maintainers = [
