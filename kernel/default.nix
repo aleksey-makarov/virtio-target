@@ -35,7 +35,7 @@ in
     '';
 
     postInstall = ''
-      install -Dm444 virtio_of.h -t $out/include/linux
+      install -Dm444 linux/virtio_of.h -t $out/include/linux
     '';
 
     meta = with lib; {
