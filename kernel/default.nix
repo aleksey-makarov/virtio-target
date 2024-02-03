@@ -13,7 +13,7 @@
   '';
 in
   stdenv.mkDerivation rec {
-    pname = "virtio-lo";
+    pname = "virtio-oF";
     version = "0.1";
     name = "${pname}-${version}-${kernel.version}";
 
@@ -35,13 +35,12 @@ in
     '';
 
     postInstall = ''
-      install -Dm444 virtio_lo.h -t $out/include/linux
-      install -Dm444 virtio_test.h -t $out/include/linux
+      install -Dm444 virtio_of.h -t $out/include/linux
     '';
 
     meta = with lib; {
-      description = "Virtio loopback userspace interface";
-      homepage = "https://www.opensynergy.com/";
+      description = "virtio-oF kernel modules";
+      homepage = "https://lists.oasis-open.org/archives/virtio-comment/202304/msg00442.html";
       license = licenses.gpl2;
       maintainers = [
         {
