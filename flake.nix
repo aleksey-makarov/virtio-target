@@ -24,7 +24,8 @@
     system = "x86_64-linux";
 
     overlay = self: super: {
-      linuxPackages = super.linuxPackages_6_6;
+      # linuxPackages = super.linuxPackages_6_1;
+      # linuxPackages = super.linuxPackages_6_6;
       linuxKernel =
         super.linuxKernel
         // {
