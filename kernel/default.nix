@@ -13,7 +13,7 @@
   '';
 in
   stdenv.mkDerivation rec {
-    pname = "virtio-oF";
+    pname = "virtio-of";
     version = "0.1";
     name = "${pname}-${version}-${kernel.version}";
 
@@ -39,7 +39,7 @@ in
     '';
 
     meta = with lib; {
-      description = "virtio-oF kernel modules";
+      description = "virtio-of kernel modules";
       homepage = "https://lists.oasis-open.org/archives/virtio-comment/202304/msg00442.html";
       license = licenses.gpl2;
       maintainers = [
