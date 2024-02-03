@@ -25,6 +25,7 @@ in
     outputs = ["out" "dev"];
 
     makeFlags = [
+      "KCFLAGS=-I${src}"
       "KERNELRELEASE=${kernel.modDirVersion}"
       "KDIR=${kernel.dev}/lib/modules/${kernel.modDirVersion}/build"
       "INSTALL_MOD_PATH=$(out)"
