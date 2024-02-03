@@ -83,6 +83,7 @@
 
     packages.${system} = rec {
       virtio-target = pkgs.virtio-target;
+      virtio-of = pkgs.linuxPackages.virtio-of;
       default = virtio-target;
     };
 
