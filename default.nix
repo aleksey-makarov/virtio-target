@@ -23,7 +23,7 @@ stdenv.mkDerivation rec {
   '';
 
   meta = with lib; {
-    description = "virtio-oF target";
+    description = "virtio-of target";
     homepage = "https://lists.oasis-open.org/archives/virtio-comment/202304/msg00442.html";
     license = licenses.mit;
     maintainers = [

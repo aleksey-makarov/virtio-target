@@ -1,7 +1,7 @@
 {
   description = "Virtio over fabrics";
 
-  nixConfig.bash-prompt = "virtio-oF";
+  nixConfig.bash-prompt = "virtio-of";
   nixConfig.bash-prompt-prefix = "[\\033[1;33m";
   nixConfig.bash-prompt-suffix = "\\033[0m \\w]$ ";
 
@@ -29,7 +29,7 @@
         super.linuxKernel
         // {
           packagesFor = kernel_: ((super.linuxKernel.packagesFor kernel_).extend (lpself: lpsuper: {
-            virtio-oF = lpsuper.callPackage ./modules {};
+            virtio-of = lpsuper.callPackage ./kernel {};
           }));
         };
       virtio-target = super.callPackage ./. {};
