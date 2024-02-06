@@ -16,41 +16,6 @@ with lib; {
     hardware.opengl.enable = true;
 
     boot = {
-      # see https://nixos.wiki/wiki/Linux_kernel "Booting a kernel from a custom source"
-      kernelPackages = let
-        my_linux_pkg = {
-          fetchurl,
-          buildLinux,
-          ...
-        } @ args:
-          buildLinux (args
-            // rec {
-              version = "6.3";
-              modDirVersion = "6.3.0";
-
-              # src = fetchurl {
-              #   url = "https://github.com/jsakkine-intel/linux-sgx/archive/v23.tar.gz";
-              #   # After the first build attempt, look for "hash mismatch" and then 2 lines below at the "got:" line.
-              #   # Use "sha256-....." value here.
-              #   hash = "";
-              # };
-              src = fetchurl {
-                url = "mirror://kernel/linux/kernel/v6.x/linux-${version}.tar.xz";
-                sha256 = "sha256-ujSR9e1r0nCjcMRAQ049aQhfzdUoki+gHnPXZX23Ox4=";
-              };
-              kernelPatches = [];
-
-              # extraConfig = ''
-              #   INTEL_SGX y
-              # '';
-
-              # extraMeta.branch = "5.4";
-            }
-            // (args.argsOverride or {}));
-
-        my_linux = pkgs.callPackage my_linux_pkg {};
-      in
-        pkgs.recurseIntoAttrs (pkgs.linuxPackagesFor my_linux);
     };
 
     # from profiles/minimal.nix
