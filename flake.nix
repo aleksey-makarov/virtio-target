@@ -52,31 +52,27 @@
     };
 
     nixos = pkgs.nixos (import ./configuration.nix);
-    # start_gtk_test_sh = pkgs.writeShellScript "start_gtk_test.sh" ''
-    #   export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive";
-    #   export GDK_GL=gles
-    #   exec ${pkgs.nixgl.nixGLMesa}/bin/nixGLMesa ${pkgs.libvirtiolo-debug}/bin/gtk_test
-    # '';
-    #    startvm_sh = pkgs.writeShellScript "startvm.sh" ''
-    #      ${pkgs.coreutils}/bin/mkdir -p ./xchg
-    #
-    #      TMPDIR=''$(pwd)
-    #      USE_TMPDIR=1
-    #      export TMPDIR USE_TMPDIR
-    #
-    #      TTY_FILE="./xchg/tty.sh"
-    #      read -r rows cols <<< "''$(${pkgs.coreutils}/bin/stty size)"
-    #
-    #      cat << EOF > "''${TTY_FILE}"
-    #      export TERM=xterm-256color
-    #      stty rows ''$rows cols ''$cols
-    #      reset
-    #      EOF
-    #
-    #      ${pkgs.coreutils}/bin/stty intr ^] # send INTR with Control-]
-    #      ${pkgs.nixgl.nixGLMesa}/bin/nixGLMesa ${nixos.vm}/bin/run-nixos-vm
-    #      ${pkgs.coreutils}/bin/stty intr ^c
-    #    '';
+
+    startvm_sh = pkgs.writeShellScript "startvm.sh" ''
+      ${pkgs.coreutils}/bin/mkdir -p ./xchg
+
+      TMPDIR=''$(pwd)
+      USE_TMPDIR=1
+      export TMPDIR USE_TMPDIR
+
+      TTY_FILE="./xchg/tty.sh"
+      read -r rows cols <<< "''$(${pkgs.coreutils}/bin/stty size)"
+
+      cat << EOF > "''${TTY_FILE}"
+      export TERM=xterm-256color
+      stty rows ''$rows cols ''$cols
+      reset
+      EOF
+
+      ${pkgs.coreutils}/bin/stty intr ^] # send INTR with Control-]
+      ${nixos.vm}/bin/run-nixos-vm
+      ${pkgs.coreutils}/bin/stty intr ^c
+    '';
   in {
     overlays.${system} = {
       default = overlay;
@@ -101,22 +97,13 @@
     };
 
     apps.${system} = rec {
-      # codium = {
-      #   type = "app";
-      #   program = "${vscode}/bin/codium";
-      # };
-      # startvm = {
-      #   type = "app";
-      #   program = "${startvm_sh}";
-      # };
-      # test_virglrenderer = {
-      #   type = "app";
-      #   program = "${startvm_sh}";
-      # };
-      # default = startvm;
       virtio-target = {
       };
-      default = virtio-target;
+      startvm = {
+        type = "app";
+        program = "${startvm_sh}";
+      };
+      default = startvm;
     };
   };
 }
