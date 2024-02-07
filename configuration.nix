@@ -75,6 +75,13 @@ with lib; {
       mc
       tree
       tmux
+
+      (writeShellScriptBin
+        "start_block_device.sh"
+        ''
+          ADDR=10.0.2.2
+          echo command=create,transport=tcp,taddr=''$ADDR,tport=15771,tvqn=virtio-target/block/block0.service,iaddr=''$ADDR,iport=0,ivqn=vqn.uuid:42761df9-4c3f-4b27-843d-c88d1dcdce32 > /dev/virtio-fabrics
+        '')
     ];
 
     users.mutableUsers = false;

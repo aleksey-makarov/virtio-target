@@ -69,6 +69,8 @@ The command
 
 starts the target.
 
+The file that provides space for the block device is `/tmp/block0.img`.
+
 ### How to run QEMU with the virtio-of modules loaded
 
 The command
@@ -93,3 +95,8 @@ You can log in to the guest system with `ssh`:
 
     ssh -p 10022 root@localhost
 
+### How to create a remote block device
+
+In the QEMU's terminal run `start_block_device.sh` shell script.
+It will create virtio block device `/dev/vdb` that is backed by the `/tmp/block0.img` file
+on the host system.  It can be formatted, mounted, written etc.
