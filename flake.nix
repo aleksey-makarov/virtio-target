@@ -83,7 +83,7 @@
 
     nixos = pkgs.nixos (import ./configuration.nix);
 
-    start_qemu_sh = pkgs.writeShellScript "startvm.sh" ''
+    start_qemu_sh = pkgs.writeShellScript "start_qemu.sh" ''
       ${pkgs.coreutils}/bin/mkdir -p ./xchg
 
       TMPDIR=''$(pwd)
@@ -148,7 +148,7 @@
       backend = driver=rng-simulator
     '';
 
-    start_vtgt_sh = pkgs.writeShellScript "startvtgt.sh" ''
+    start_vtgt_sh = pkgs.writeShellScript "start_vtgt.sh" ''
       if [ ! -f /tmp/block0.img ] ; then
         truncate -s 1G /tmp/block0.img
       fi
