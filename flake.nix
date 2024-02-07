@@ -83,7 +83,7 @@
 
     nixos = pkgs.nixos (import ./configuration.nix);
 
-    startvm_sh = pkgs.writeShellScript "startvm.sh" ''
+    start_qemu_sh = pkgs.writeShellScript "startvm.sh" ''
       ${pkgs.coreutils}/bin/mkdir -p ./xchg
 
       TMPDIR=''$(pwd)
@@ -118,6 +118,42 @@
 
       .PHONY: modules clean
     '';
+
+    vtgt_config = pkgs.writeText "vtgt.conf" ''
+      [target]
+      transport = tcp
+      #transport = rdma
+      address = 0.0.0.0
+      # address = 192.168.122.1
+      port = 15771
+      threads = 4
+      targets = 128
+
+      [block0]
+      tvqn = virtio-target/block/block0.service
+      model = block
+      features = 0
+      backend = driver=block-posix,path=/tmp/block0.img,queues=4,serial=vtgt-000001
+
+      [crypto0]
+      tvqn = virtio-target/crypto/crypto0.service
+      model = crypto
+      features = 0
+      backend = driver=crypto-gcrypt
+
+      [rng0]
+      tvqn = virtio-target/rng/rng0.service
+      model = rng
+      features = 0
+      backend = driver=rng-simulator
+    '';
+
+    start_vtgt_sh = pkgs.writeShellScript "startvtgt.sh" ''
+      if [ ! -f /tmp/block0.img ] ; then
+        truncate -s 1G /tmp/block0.img
+      fi
+      exec ${pkgs.virtio-target}/bin/vtgt ${vtgt_config};
+    '';
   in {
     overlays.${system} = {
       default = overlay;
@@ -143,13 +179,15 @@
     };
 
     apps.${system} = rec {
-      virtio-target = {
-      };
-      startvm = {
+      vtgt = {
         type = "app";
-        program = "${startvm_sh}";
+        program = "${start_vtgt_sh}";
       };
-      default = startvm;
+      qemu = {
+        type = "app";
+        program = "${start_qemu_sh}";
+      };
+      default = vtgt;
     };
   };
 }
