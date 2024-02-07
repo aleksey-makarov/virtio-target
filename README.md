@@ -3,7 +3,7 @@
 > "Virtio Over Fabrics" aims at "reuse virtio device specifications",
 > and provides network defined peripheral devices.
 > And this protocol also could be used in virtualization environment,
-> typically hypervisor(or vhost-user process) handles request from virtio PCI/MMIO/CCW,
+> typically hypervisor (or vhost-user process) handles request from virtio PCI/MMIO/CCW,
 > remaps request and forwards to target by fabrics.
 
 ## History
@@ -14,7 +14,7 @@ V4 was issued on July 2023: https://lists.oasis-open.org/archives/virtio-comment
 
 Initial post https://lists.oasis-open.org/archives/virtio-comment/202304/msg00442.html refers to some implementation of it:
 
-Kernel side: https://github.com/pizhenwei/linux/tree/virtio-of-github
+Kernel: https://github.com/pizhenwei/linux/tree/virtio-of-github
 
 Target: https://github.com/pizhenwei/virtio-target/ It looks like it contains implementations for VIRTIO block,  crypto and random number generator devices.
 

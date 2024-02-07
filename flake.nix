@@ -26,6 +26,7 @@
     overlay = self: super: {
       # linuxPackages = super.linuxPackages_6_1;
       # linuxPackages = super.linuxPackages_6_6;
+      # see https://nixos.wiki/wiki/Linux_kernel "Booting a kernel from a custom source"
       linuxPackages = let
         my_linux_pkg = {
           fetchurl,
@@ -37,12 +38,6 @@
               version = "6.3";
               modDirVersion = "6.3.0";
 
-              # src = fetchurl {
-              #   url = "https://github.com/jsakkine-intel/linux-sgx/archive/v23.tar.gz";
-              #   # After the first build attempt, look for "hash mismatch" and then 2 lines below at the "got:" line.
-              #   # Use "sha256-....." value here.
-              #   hash = "";
-              # };
               src = fetchurl {
                 url = "mirror://kernel/linux/kernel/v6.x/linux-${version}.tar.xz";
                 sha256 = "sha256-ujSR9e1r0nCjcMRAQ049aQhfzdUoki+gHnPXZX23Ox4=";
