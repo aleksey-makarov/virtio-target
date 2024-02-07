@@ -49,5 +49,47 @@ Clone the Remote GPU repo from GitHub, enter to the created directory and run `n
 
 The last command will download the most of the required software from the `Nix` caches
 and create the environment.
-After it completes you will be presented a shell environment where all the required
+At the moment the software requires linux kernel version 6.3 and it is not in the
+Nix caches so nix will build it. That will take some time.
+
+After the command completes you will be presented a shell environment where all the required
 software is ready to use.
+
+In the development environment both target and kernel modules could be built:
+
+    make
+    cd kernel
+    make
+
+### How to run the target
+
+The command
+
+    nix run
+
+starts the target.
+
+### How to run QEMU with the virtio-of modules loaded
+
+The command
+
+    nix run .#qemu
+
+starts QEMU with the virtio-of modules loaded.
+
+It builds `virtio-of` kernel modules,
+It creates a `QEMU` disk `nixos.qcow2` with all the required software,
+and starts `QEMU` with that disk.  It creates a serial shell sessioin to the
+machine in the termial.  You will be authomatically logged in as `root`.
+Also it creates `xchg` directory that is mounted inside `QEMU` as `/tmp/xchg`.
+
+You can run
+
+    . /tmp/xchg/tty.sh
+
+to fix terminal settings inside of the serial terminal of the `QEMU`.
+
+You can log in to the guest system with `ssh`:
+
+    ssh -p 10022 root@localhost
+
