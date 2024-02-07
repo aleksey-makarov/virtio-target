@@ -103,6 +103,21 @@
       ${nixos.vm}/bin/run-nixos-vm
       ${pkgs.coreutils}/bin/stty intr ^c
     '';
+
+    kernel_makefile = pkgs.writeText "Makefile" ''
+      export KCFLAGS=-I$(PWD)
+      KERNELRELEASE=${pkgs.linuxPackages.kernel.modDirVersion}
+      KDIR=${pkgs.linuxPackages.kernel.dev}/lib/modules/${pkgs.linuxPackages.kernel.modDirVersion}/build
+      INSTALL_MOD_PATH=''$(out)
+
+      modules:
+      ''\t$(MAKE) -C $(KDIR) M=$(PWD) modules
+
+      clean:
+      ''\t$(MAKE) -C $(KDIR) M=$(PWD) clean
+
+      .PHONY: modules clean
+    '';
   in {
     overlays.${system} = {
       default = overlay;
@@ -120,6 +135,7 @@
           packages = [vscode];
           inputsFrom = [pkgs.virtio-target];
           shellHook = ''
+            ln -fs ${kernel_makefile} kernel/Makefile
             echo "Hello world"
           '';
         };
