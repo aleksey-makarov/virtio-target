@@ -16,6 +16,8 @@ with lib; {
     hardware.opengl.enable = true;
 
     boot = {
+      extraModulePackages = with config.boot.kernelPackages; [virtio-of];
+      kernelModules = ["virtio-fabrics" "virtio-tcp" "virtio-rdma"];
     };
 
     # from profiles/minimal.nix
