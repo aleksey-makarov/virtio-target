@@ -179,6 +179,10 @@
     };
 
     apps.${system} = rec {
+      codium = {
+        type = "app";
+        program = "${vscode}/bin/codium";
+      };
       vtgt = {
         type = "app";
         program = "${start_vtgt_sh}";
