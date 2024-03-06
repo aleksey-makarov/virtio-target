@@ -155,7 +155,7 @@
       exec ${pkgs.virtio-target}/bin/vtgt ${vtgt_config};
     '';
   in {
-    overlays.${system} = {
+    overlays = {
       default = overlay;
     };
 
