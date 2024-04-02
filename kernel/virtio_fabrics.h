@@ -63,6 +63,8 @@ static inline struct vof_device *to_vofdev(struct virtio_device *vdev)
 	return container_of(vdev, struct vof_device, vdev);
 }
 
+#define vof_dbg(fmt, ...) pr_info("%s():%d : " fmt, __func__, __LINE__, ##__VA_ARGS__)
+
 #define vof_dev_err(vofdev, fmt, ...)							\
 	pr_err("%s://%s:%s/%s: " fmt, vofdev->opts->transport, vofdev->opts->taddr,	\
 		vofdev->opts->tport, vofdev->opts->tvqn, ##__VA_ARGS__)

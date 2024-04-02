@@ -51,12 +51,6 @@ static LIST_HEAD(vof_devices);
 /* workqueue for virtio-of */
 static struct workqueue_struct *vof_wq;
 
-#if 1
-#define vof_dbg(fmt, ...)
-#else
-#define vof_dbg(fmt, ...) pr_info("%s: " fmt, __func__, ##__VA_ARGS__)
-#endif
-
 enum vof_opt_type {
 	VOF_OPT_ERR = 0,
 	VOF_OPT_COMMAND,
@@ -90,7 +84,7 @@ static struct vof_options *vof_alloc_options(void)
 		return ERR_PTR(-ENOMEM);
 
 	kref_init(&opts->ref);
-	vof_dbg("%px\n", opts);
+	// vof_dbg("%px\n", opts);
 
 	return opts;
 }
@@ -109,7 +103,7 @@ static void vof_free_options(struct kref *ref)
 	kfree(opts->ivqn);
 	kfree(opts);
 
-	vof_dbg("%px\n", opts);
+	// vof_dbg("%px\n", opts);
 }
 
 static inline void vof_get_options(struct vof_options *opts)
@@ -309,7 +303,7 @@ static struct vof_request *vof_alloc_req(struct vof_queue *vofq, u16 snd_ndesc, 
 	vofreq->vofcmd->common.command_id = cpu_to_le16(command_id);
 	vofreq->vofcomp.status = cpu_to_le16(VIRTIO_OF_ETIMEDOUT);
 
-vof_dbg("vofq %px, vofreq %px\n", vofq, vofreq);
+// vof_dbg("vofq %px, vofreq %px\n", vofq, vofreq);
 	return vofreq;
 }
 
@@ -318,7 +312,7 @@ static void vof_free_req(struct vof_queue *vofq, struct vof_request *vofreq)
 	struct vof_device *vofdev = vofq->vofdev;
 	u16 command_id = le16_to_cpu(vofreq->vofcmd->common.command_id);
 
-vof_dbg("vofq %px, vofreq %px\n", vofq, vofreq);
+//vof_dbg("vofq %px, vofreq %px\n", vofq, vofreq);
 	xa_erase(&vofq->xa_cmds, command_id);
 	vofdev->ops->free_req(vofreq);
 }
@@ -334,6 +328,8 @@ static int vof_connect(struct vof_queue *vofq, u16 target_id, u16 queue_id)
 	u32 length = sizeof(struct virtio_of_connect);
 	int ret = -ENOMEM;
 
+	vof_dbg("target_id=%d, queue_id=%d", (int)target_id, (int)queue_id);
+
 	connect = kzalloc(length, GFP_KERNEL);
 	if (!connect)
 		return -ENOMEM;
@@ -342,7 +338,7 @@ static int vof_connect(struct vof_queue *vofq, u16 target_id, u16 queue_id)
 	if (!vofreq)
 		goto free_buf;
 
-	vof_dbg("vofreq %px\n", vofreq);
+	// vof_dbg("vofreq %px\n", vofreq);
 	strncpy(connect->ivqn, vofdev->opts->ivqn, sizeof(connect->ivqn));
 	strncpy(connect->tvqn, vofdev->opts->tvqn, sizeof(connect->tvqn));
 	cmd = &vofreq->vofcmd->connect;
@@ -387,7 +383,7 @@ static int vof_get_vendor_id(struct virtio_device *vdev, u32 *vendor_id)
 	struct vof_request *vofreq;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 
 	vofreq = vof_alloc_req(vofq, 0, 0, -1);
 	if (!vofreq)
@@ -419,7 +415,7 @@ static int vof_get_device_id(struct virtio_device *vdev, u32 *device_id)
 	struct vof_request *vofreq;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 
 	vofreq = vof_alloc_req(vofq, 0, 0, -1);
 	if (!vofreq)
@@ -485,7 +481,7 @@ static void vof_get(struct virtio_device *vdev, unsigned int offset, void *buf, 
 	u64 v64;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 
 	vofreq = vof_alloc_req(vofq, 0, 0, -1);
 	if (!vofreq)
@@ -543,7 +539,7 @@ static void vof_set(struct virtio_device *vdev, unsigned int offset, const void 
 	u64 v64;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 	vofreq = vof_alloc_req(vofq, 0, 0, -1);
 	if (!vofreq)
 		return;
@@ -595,7 +591,7 @@ static u32 vof_generation(struct virtio_device *vdev)
 	u32 generation = 0;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 	vofreq = vof_alloc_req(vofq, 0, 0, -1);
 	if (!vofreq)
 		return 0;
@@ -628,7 +624,7 @@ static u8 vof_get_status(struct virtio_device *vdev)
 	u8 status = VIRTIO_CONFIG_S_FAILED;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 	/* once we are destroying the fabric device, network is going to disconnect */
 	if (vofdev->state == vof_dev_destroy)
 		return 0;
@@ -664,7 +660,7 @@ static void vof_set_status(struct virtio_device *vdev, u8 status)
 	struct vof_request *vofreq;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 	if (vofdev->state == vof_dev_destroy)
 		return;
 
@@ -697,7 +693,7 @@ static int vof_get_queue_size(struct virtio_device *vdev, __u16 queue_id)
 	u16 size = 0;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 
 	vofreq = vof_alloc_req(vofq, 0, 0, -1);
 	if (!vofreq)
@@ -737,7 +733,7 @@ static u64 vof_get_features(struct virtio_device *vdev)
 	u64 feature = 0;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 	vofreq = vof_alloc_req(vofq, 0, 0, -1);
 	if (!vofreq)
 		return 0;
@@ -771,7 +767,7 @@ static int vof_finalize_features(struct virtio_device *vdev)
 	struct vof_request *vofreq;
 	int ret;
 
-	vof_dbg("\n");
+	// vof_dbg("\n");
 	vring_transport_features(vdev);
 
 	vofreq = vof_alloc_req(vofq, 0, 0, -1);
@@ -909,7 +905,7 @@ static void vof_interrupt(struct vof_queue *vofq, struct virtio_of_completion *v
 
 	command_id = le16_to_cpu(vofcomp->command_id);
 	vofreq = vof_request_load(vofq, command_id);
-	vof_dbg("command_id %d, vofreq %px\n", command_id, vofreq);
+	// vof_dbg("command_id %d, vofreq %px\n", command_id, vofreq);
 	if (unlikely(!vofreq)) {
 		//TODO handle error
 		dev_err(&vofq->vofdev->vdev.dev, "unexpected command id");
@@ -918,7 +914,7 @@ static void vof_interrupt(struct vof_queue *vofq, struct virtio_of_completion *v
 
 	memcpy(&vofreq->vofcomp, vofcomp, sizeof(*vofcomp));
 	opcode = le16_to_cpu(vofreq->vofcmd->common.opcode);
-	vof_dbg("command_id %d, opcode 0x%x\n", command_id, opcode);
+	// vof_dbg("command_id %d, opcode 0x%x\n", command_id, opcode);
 	if (opcode == virtio_of_op_vring) {
 		last_used_idx = vofq->last_used_idx;
 		elem = &used->ring[last_used_idx & (vring->num - 1)];
@@ -931,7 +927,7 @@ static void vof_interrupt(struct vof_queue *vofq, struct virtio_of_completion *v
 		used->idx = cpu_to_virtio16(&vofq->vofdev->vdev, vofq->last_used_idx);
 		virtio_mb(true);
 		flags = cpu_to_virtio16(&vofq->vofdev->vdev, avail->flags);
-		vof_dbg("command_id 0x%x, last_used_idx %d, len %d, flags 0x%x\n", command_id, last_used_idx, len, flags);
+		// vof_dbg("command_id 0x%x, last_used_idx %d, len %d, flags 0x%x\n", command_id, last_used_idx, len, flags);
 		if (!(flags & VRING_AVAIL_F_NO_INTERRUPT))
 			vring_interrupt(0, vofq->vq);  //TODO use tcp queue irq id
 	} else {
@@ -943,6 +939,8 @@ static struct vof_queue *vof_create_queue(struct vof_device *vofdev, u16 target_
 {
 	struct vof_queue *vofq;
 	int ret;
+
+	vof_dbg("target_id=%d, queue_id=%d, vring_num=%d", (int)target_id, (int)queue_id, (int)vring_num);
 
 	vofq = vofdev->ops->create_queue(vofdev, vring_num);
 	if (IS_ERR(vofq))
@@ -974,6 +972,8 @@ static struct virtqueue *vof_setup_vq(struct virtio_device *vdev, unsigned int i
 	int qsize;
 	int ret;
 
+	vof_dbg("index=%d, name=\"%s\", ctx=%d\n", index, name, ctx ? 1 : 0);
+
 	BUG_ON(index >= vofdev->num_queues);
 	BUG_ON(vofdev->vringq[index]);
 
@@ -982,7 +982,6 @@ static struct virtqueue *vof_setup_vq(struct virtio_device *vdev, unsigned int i
 		dev_err(&vofdev->vdev.dev, "bad queue size %u", qsize);
 		return ERR_PTR(-EINVAL);
 	}
-	vof_dbg("queue %d, queue size %d\n", index, qsize);
 
 	vofq = vof_create_queue(vofdev, vofdev->target_id, index, qsize);
 	if (IS_ERR(vofq))
@@ -1061,6 +1060,8 @@ static const struct virtio_config_ops vof_config_ops = {
 static int vof_create_ctrlq(struct vof_device *vofdev)
 {
 	int ret;
+
+	vof_dbg();
 
 	vofdev->ctrlq = vof_create_queue(vofdev, 0xffff, 0, VOF_CTRL_QSIZE);
 	if (IS_ERR(vofdev->ctrlq))
